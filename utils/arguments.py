@@ -1,7 +1,7 @@
 import argparse
-from logger import Logger as Log
-from logger import LoggerLevel
-from constants import *
+from utils.logger import Logger as Log
+from utils.logger import LoggerLevel
+from utils.constants import *
 
 
 TAG = "Arguments"

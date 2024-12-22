@@ -1,6 +1,8 @@
 import multiprocessing
 from utils.constants import Constants
-TAG3 = "CSV"
+from utils.logger import Logger
+from utils.fileManager import FileManager
+TAG = "CSV"
 
 
 class CSVProcess(multiprocessing.Process):
@@ -28,7 +30,7 @@ class CSVProcess(multiprocessing.Process):
         if filename is None:
             filename = strftime(Constants.csv_default_filename, gmtime())
         self._file = self._create_file(filename, path=path)
-        Logger.i(TAG3, "Process ready")
+        Logger.i(TAG, "Process ready")
 
     def add(self, time, values):
         """
@@ -50,14 +52,14 @@ class CSVProcess(multiprocessing.Process):
         and the process will loop again after timeout if more data is available.
         :return:
         """
-        Logger.i(TAG3, "Process starting...")
+        Logger.i(TAG, "Process starting...")
         self._csv = csv.writer(self._file, delimiter=Constants.csv_delimiter, quoting=csv.QUOTE_MINIMAL)
         while not self._exit.is_set():
             self._consume_queue()
             sleep(self._timeout)
         # last check on the queue to completely remove data.
         self._consume_queue()
-        Logger.i(TAG3, "Process finished")
+        Logger.i(TAG, "Process finished")
         self._file.close()
 
     def _consume_queue(self):
@@ -77,7 +79,7 @@ class CSVProcess(multiprocessing.Process):
         Signals the process to stop storing data.
         :return:
         """
-        Logger.i(TAG3, "Process finishing...")
+        Logger.i(TAG, "Process finishing...")
         self._exit.set()
 
     @staticmethod
@@ -95,6 +97,6 @@ class CSVProcess(multiprocessing.Process):
         FileManager.create_dir(path)
         full_path = FileManager.create_file(filename, extension=extension, path=path)
         if not FileManager.file_exists(full_path):
-            Logger.i(TAG3, "Storing in {}".format(full_path))
+            Logger.i(TAG, "Storing in {}".format(full_path))
             return open(full_path, "a", newline='')
         return None

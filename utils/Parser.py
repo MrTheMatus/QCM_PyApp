@@ -5,7 +5,7 @@ from utils.constants import Constants
 from utils.logger import Logger
 
 
-TAG4 = "Parser"
+TAG = "Parser"
 
 
 class ParserProcess(multiprocessing.Process):
@@ -33,7 +33,7 @@ class ParserProcess(multiprocessing.Process):
         self._consumer_timeout = consumer_timeout
         self._split = split
         self._store_reference = store_reference
-        Logger.d(TAG4, "Process ready")
+        Logger.d(TAG, "Process ready")
 
     def add(self, txt):
         """
@@ -50,20 +50,20 @@ class ParserProcess(multiprocessing.Process):
         The process will loop again after timeout if more data is available.
         :return:
         """
-        Logger.d(TAG4, "Process starting...")
+        Logger.d(TAG, "Process starting...")
         while not self._exit.is_set():
             self._consume_queue()
             sleep(self._consumer_timeout)
         # last check on the queue to completely remove data.
         self._consume_queue()
-        Logger.d(TAG4, "Process finished")
+        Logger.d(TAG, "Process finished")
 
     def stop(self):
         """
         Signals the process to stop parsing data.
         :return:
         """
-        Logger.d(TAG4, "Process finishing...")
+        Logger.d(TAG, "Process finishing...")
         self._exit.set()
 
     def _consume_queue(self):
@@ -94,12 +94,12 @@ class ParserProcess(multiprocessing.Process):
                 else:
                     raise TypeError
                 values = [float(v) for v in values]
-                Logger.d(TAG4, values)
+                Logger.d(TAG, values)
                 self._out_queue.put((time, values))
                 if self._store_reference is not None:
                     self._store_reference.add(time, values)
             except ValueError:
-                Logger.w(TAG4, "Can't convert to float. Raw: {}".format(line.strip()))
+                Logger.w(TAG, "Can't convert to float. Raw: {}".format(line.strip()))
             except AttributeError:
-                Logger.w(TAG4, "Attribute error on type ({}). Raw: {}".format(type(line), line.strip()))
+                Logger.w(TAG, "Attribute error on type ({}). Raw: {}".format(type(line), line.strip()))
 

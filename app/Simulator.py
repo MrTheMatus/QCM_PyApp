@@ -7,7 +7,7 @@ from utils.constants import Constants
 from utils.logger import Logger as Log
 
 
-TAG6 = "Simulator"
+TAG = "Simulator"
 
 
 class SimulatorProcess(multiprocessing.Process):
@@ -24,7 +24,7 @@ class SimulatorProcess(multiprocessing.Process):
         self._exit = multiprocessing.Event()
         self._period = None
         self._parser = parser_process
-        Log.i(TAG6, "Process Ready")
+        Log.i(TAG, "Process Ready")
 
     def open(self, port=None, speed=Constants.simulator_default_speed, timeout=0.5):
         """
@@ -39,7 +39,7 @@ class SimulatorProcess(multiprocessing.Process):
         :rtype: bool.
         """
         self._period = float(speed)
-        Log.i(TAG6, "Using sample rate at {}".format(self._period))
+        Log.i(TAG, "Using sample rate at {}".format(self._period))
         return True
 
     def run(self):
@@ -47,7 +47,7 @@ class SimulatorProcess(multiprocessing.Process):
         Simulates raw data incoming as CSV.
         :return:
         """
-        Log.i(TAG6, "Process starting...")
+        Log.i(TAG, "Process starting...")
         timestamp = time()
         coef = 2 * np.pi
         while not self._exit.is_set():
@@ -55,14 +55,14 @@ class SimulatorProcess(multiprocessing.Process):
             self._parser.add([stamp, str(("{},{}\r\n".format(np.sin(coef * stamp), np.cos(coef * stamp))))
                              .encode(Constants.app_encoding)])
             sleep(self._period)
-        Log.i(TAG6, "Process finished")
+        Log.i(TAG, "Process finished")
 
     def stop(self):
         """
         Signals the process to stop acquiring data.
         :return:
         """
-        Log.i(TAG6, "Process finishing...")
+        Log.i(TAG, "Process finishing...")
         self._exit.set()
 
     @staticmethod

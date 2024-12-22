@@ -6,6 +6,11 @@ from app.worker import Worker  # Ensure Worker is imported correctly
 from utils.constants import Constants, SourceType  # Adjust the path for your project structure
 from utils.logger import Logger
 from utils.popUp import PopUp  # Adjust the path for Logger and PopUp classes
+from utils.CSVProcess import CSVProcess
+import csv
+from enum import Enum
+from pyqtgraph import AxisItem
+from utils.arguments import Arguments
 
 # Rest of the file remains unchanged
 
@@ -51,31 +56,32 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
 
 
-        self.ui.saveButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(1))
-        self.ui.materialsButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(2))
-        self.ui.plotsButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(3))
-        self.ui.resetButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(0))
-        self.ui.settingsButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(5))
-        self.ui.connectionButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(4))
-        self.ui.helpButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(6))
-        self.ui.infoButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(7))
+        # Configure page navigation
+        self.ui.homeButton.clicked.connect(lambda: self.switch_page(0))
+        self.ui.saveButton.clicked.connect(lambda: self.switch_page(1))
+        self.ui.materialsButton.clicked.connect(lambda: self.switch_page(2))
+        self.ui.plotsButton.clicked.connect(lambda: self.switch_page(3))
+        self.ui.connectionButton.clicked.connect(lambda: self.switch_page(4))
+        self.ui.settingsButton.clicked.connect(lambda: self.switch_page(5))
+        self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
+        self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
         # self.ui.tareButton.clicked(tare = lambda: self.ui.frequencyLineEdit()) 
-            
-        if (self.ui.stackedWidget.currentIndex() == 1):
-            pass
-        if (self.ui.stackedWidget.currentIndex() == 2):
-            pass
-        if (self.ui.stackedWidget.currentIndex() == 4):
-            pass
-        if (self.ui.stackedWidget.currentIndex() == 5):
-            pass
+
+    def switch_page(self, index):
+        """Switch to the specified page in the QStackedWidget."""
+        if 0 <= index < self.ui.stackedWidget.count():
+            self.ui.stackedWidget.setCurrentIndex(index)
+            print(f"Switched to page {index}: {self.ui.stackedWidget.currentWidget().objectName()}")
+        else:
+            print(f"Invalid page index: {index}")
+
     def start(self):
         """
         Starts the acquisition of the selected serial port.
         This function is connected to the clicked signal of the Start button.
         :return:
         """
-        Logger.i(TAG2, "Clicked start")
+        Logger.i("TAG", "Clicked start")
         self.worker = Worker(port=self.ui.cBox_Port.currentText(),
                              speed=float(self.ui.cBox_Speed.currentText()),
                              samples=self.ui.sBox_Samples.value(),
@@ -85,7 +91,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             self._timer_plot.start(Constants.plot_update_ms)
             self._enable_ui(False)
         else:
-            Logger.i(TAG2, "Port is not available")
+            Logger.i("TAG", "Port is not available")
             PopUp.warning(self, Constants.app_title, "Selected port \"{}\" is not available"
                           .format(self.ui.cBox_Port.currentText()))
 
@@ -95,7 +101,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         This function is connected to the clicked signal of the Stop button.
         :return:
         """
-        Logger.i(TAG2, "Clicked stop")
+        Logger.i("TAG", "Clicked stop")
         self._timer_plot.stop()
         self._enable_ui(True)
         self.worker.stop()
@@ -108,7 +114,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         :return:
         """
         if self.worker.is_running():
-            Logger.i(TAG2, "Window closed without stopping capture, stopping it")
+            Logger.i("TAG", "Window closed without stopping capture, stopping it")
             self.stop()
 
     def _enable_ui(self, enabled):
@@ -192,7 +198,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         :return:
         """
         if self.worker is not None:
-            Logger.i(TAG2, "Changing sample size")
+            Logger.i("TAG", "Changing sample size")
             self.worker.reset_buffers(self.ui.sBox_Samples.value())
 
     def _update_plot(self):
@@ -263,7 +269,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         This function is connected to the indexValueChanged signal of the Source ComboBox.
         :return:
         """
-        Logger.i(TAG2, "Scanning source {}".format(self._get_source().name))
+        Logger.i("G", "Scanning source {}".format(self._get_source().name))
         # clear boxes before adding new
         self.ui.cBox_Port.clear()
         self.ui.cBox_Speed.clear()
@@ -286,6 +292,54 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         :rtype: SourceType.
         """
         return SourceType(self.ui.cBox_Source.currentIndex())
-
     
+    def load_materials(self):
+        """Load materials from the database and display in the list widget."""
+        self.ui.materialsListWidget.clear()
+        materials = self.material_library.get_materials()
+        if not materials:
+            Logger.w("ControlMainWindow", "No materials found in the database.")
+            return
+        for material in materials:
+            item = QListWidgetItem(f"{material['name']} ({material['density']} {material['unit']})")
+            item.setData(QtCore.Qt.UserRole, material['id'])  # Store material ID in the item
+            self.ui.materialsListWidget.addItem(item)
+
+    def add_material(self):
+        """Add a new material to the database."""
+        name = self.ui.materialEditLineEdit.text()
+        density = self.ui.densityEditLineEdit.text()
+        unit = self.ui.materialunitComboBox.currentText()
+
+        if name and density and unit:
+            self.material_library.add_material(name, float(density), unit)
+            self.load_materials()
+
+    def update_material(self):
+        """Update the selected material in the database."""
+        selected_item = self.ui.materialsListWidget.currentItem()
+        if not selected_item:
+            return
+
+        material_id = selected_item.data(QtCore.Qt.UserRole)
+        name = self.ui.materialEditLineEdit.text()
+        density = self.ui.densityEditLineEdit.text()
+        unit = self.ui.materialunitComboBox.currentText()
+
+        if name and density and unit:
+            self.material_library.update_material(material_id, name, float(density), unit)
+            self.load_materials()
+
+    def delete_material(self):
+        """Delete the selected material from the database."""
+        selected_item = self.ui.materialsListWidget.currentItem()
+        if not selected_item:
+            return
+
+        material_id = selected_item.data(QtCore.Qt.UserRole)
+        self.material_library.delete_material(material_id)
+        self.load_materials()
+
+
         
+            

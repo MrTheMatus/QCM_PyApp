@@ -10,7 +10,7 @@ from app.Simulator import SimulatorProcess
 from utils.logger import Logger as Log
 
 
-TAG8 = "Worker"
+TAG = "Worker"
 
 
 class Worker:
@@ -91,7 +91,7 @@ class Worker:
             self._parser_process.start()
             return True
         else:
-            Log.i(TAG8, "Port is not available")
+            Log.i(TAG, "Port is not available")
             return False
 
     def stop(self):
@@ -193,7 +193,7 @@ class Worker:
         elif source == SourceType.SocketClient:
             return SocketProcess.get_default_host()
         else:
-            Log.w(TAG8, "Unknown source selected")
+            Log.w(TAG, "Unknown source selected")
             return None
 
     @staticmethod
@@ -212,7 +212,7 @@ class Worker:
         elif source == SourceType.SocketClient:
             return SocketProcess.get_default_port()
         else:
-            Log.w(TAG8, "Unknown source selected")
+            Log.w(TAG, "Unknown source selected")
             return None
 
     def reset_buffers(self, samples):
@@ -228,4 +228,4 @@ class Worker:
         self._time_buffer = RingBuffer(samples)
         while not self._queue.empty():
             self._queue.get()
-        Log.i(TAG8, "Buffers cleared")
+        Log.i(TAG, "Buffers cleared")

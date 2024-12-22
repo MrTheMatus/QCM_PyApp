@@ -1,5 +1,7 @@
 from enum import Enum
 from pyqtgraph import AxisItem
+import sys
+import platform
 
 class Architecture:
     """
@@ -80,7 +82,7 @@ class OSType(Enum):
 
 
 
-TAG2 = "Arguments"
+TAG = "Arguments"
 
 
 class Arguments:
@@ -130,7 +132,7 @@ class Arguments:
         if self._parser is not None:
             self._parse_log_level()
         else:
-            Logger.w(TAG2, "Parser was not created !")
+            Logger.w(TAG, "Parser was not created !")
             return None
 
     def get_user_samples(self):
