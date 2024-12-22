@@ -1,8 +1,8 @@
 import multiprocessing
 from time import sleep
 
-from constants import Constants
-from Logger import Loggerger as Logger
+from utils.constants import Constants
+from utils.logger import Logger
 
 
 TAG4 = "Parser"

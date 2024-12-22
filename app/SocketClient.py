@@ -3,8 +3,8 @@ from time import time
 
 import socket
 
-from constants import Constants
-from logger import Logger as Log
+from utils.constants import Constants
+from utils.logger import Logger as Log
 
 
 TAG7 = "Socket"

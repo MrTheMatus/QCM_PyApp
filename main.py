@@ -4,14 +4,20 @@ from PyQt5 import QtWidgets
 from ui.ui_main2 import Ui_AffordableQCM  # Import the generated UI
 from app.data_handler import DataHandler
 from app.material_library import MaterialLibrary  # Material library logic
+from PyQt5.QtWidgets import QApplication, QMainWindow
+from controlMainWindow import ControlMainWindow
+from utils.logger import Logger
+from PyQt5.QtWidgets import QListWidgetItem
+from PyQt5 import QtCore
+
 
 class MainApp(QMainWindow, Ui_AffordableQCM):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
 
-        # Initialize the material library
-        self.material_library = MaterialLibrary()
+        # Initialize MaterialLibrary with the correct database path
+        self.material_library = MaterialLibrary(db_path="deploy/db/database.db")
 
         # Connect signals
         self.addButton.clicked.connect(self.add_material)
@@ -23,14 +29,19 @@ class MainApp(QMainWindow, Ui_AffordableQCM):
         # Load materials on startup
         self.load_materials()
 
+
     def load_materials(self):
         """Load materials from the database and display in the list widget."""
         self.materialsListWidget.clear()
         materials = self.material_library.get_materials()
+        if not materials:
+            Logger.w("MainApp", "No materials found in the database.")
+            return
         for material in materials:
             item = QListWidgetItem(f"{material['name']} ({material['density']} {material['unit']})")
             item.setData(QtCore.Qt.UserRole, material['id'])  # Store material ID in the item
             self.materialsListWidget.addItem(item)
+
 
     def add_material(self):
         """Add a new material to the database."""

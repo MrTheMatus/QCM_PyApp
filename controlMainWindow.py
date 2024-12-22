@@ -1,3 +1,15 @@
+from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtCore import QTimer
+from ui.ui_main2 import Ui_AffordableQCM  # Adjust if needed
+from app.worker import Worker  # Ensure Worker is imported correctly
+from utils.constants import Constants, SourceType  # Adjust the path for your project structure
+from utils.logger import Logger
+from utils.popUp import PopUp  # Adjust the path for Logger and PopUp classes
+
+# Rest of the file remains unchanged
+
+
 class ControlMainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, port=None, bd=115200, samples=500):
         super(ControlMainWindow, self).__init__(parent)

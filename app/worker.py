@@ -1,13 +1,13 @@
 from multiprocessing import Queue
 
-from constants import Constants, SourceType
-from ringBuffer import RingBuffer
-from Csv import CSVProcess
-from Parser import ParserProcess
-from Serial import SerialProcess
-from SocketClient import SocketProcess
-from Simulator import SimulatorProcess
-from logger import Logger as Log
+from utils.constants import Constants, SourceType
+from utils.ringBuffer import RingBuffer
+from utils import CSVProcess
+from utils.Parser import ParserProcess
+from app.Serial import SerialProcess
+from app.SocketClient import SocketProcess
+from app.Simulator import SimulatorProcess
+from utils.logger import Logger as Log
 
 
 TAG8 = "Worker"

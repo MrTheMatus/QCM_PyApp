@@ -4,10 +4,10 @@ from time import time
 import serial
 from serial.tools import list_ports
 
-from architecture import Architecture
-from architecture import OSType
-from constants import Constants
-from logger import Logger as Log
+from utils.architecture import Architecture
+from utils.architecture import OSType
+from utils.constants import Constants
+from utils.logger import Logger as Log
 
 
 TAG5 = "Serial"

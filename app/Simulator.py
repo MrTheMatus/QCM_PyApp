@@ -3,8 +3,8 @@ from time import time, sleep
 
 import numpy as np
 
-from constants import Constants
-from logger import Logger as Log
+from utils.constants import Constants
+from utils.logger import Logger as Log
 
 
 TAG6 = "Simulator"

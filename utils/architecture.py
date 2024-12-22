@@ -1,3 +1,6 @@
+from enum import Enum
+from pyqtgraph import AxisItem
+
 class Architecture:
     """
     Wrappers for architecture specific methods.

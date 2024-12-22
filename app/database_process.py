@@ -2,8 +2,8 @@ import sqlite3
 import multiprocessing
 from time import sleep
 from datetime import datetime
-from constants import Constants  # Adjust path as needed
-from logger import Logger  # Adjust path as needed
+from utils.constants import Constants  # Adjust path as needed
+from utils.logger import Logger  # Adjust path as needed
 
 TAG3 = "DB"
 BATCH_SIZE = 60  # Number of records to batch before committing

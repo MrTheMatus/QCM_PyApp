@@ -8,9 +8,16 @@ class DataHandler:
 
     def create_tables(self):
         cursor = self.conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, timestamp TEXT, message TEXT)''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS materials (id INTEGER PRIMARY KEY, name TEXT, coefficient REAL)''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS materials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                density REAL NOT NULL,
+                unit TEXT NOT NULL
+            )
+        ''')
         self.conn.commit()
+
 
     def insert_log(self, timestamp, message):
         cursor = self.conn.cursor()
