@@ -1,3 +1,6 @@
+import os
+
+
 class FileManager:
     """
     Wrappers for file operations.

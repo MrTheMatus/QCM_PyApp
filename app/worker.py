@@ -1,3 +1,17 @@
+from multiprocessing import Queue
+
+from constants import Constants, SourceType
+from ringBuffer import RingBuffer
+from Csv import CSVProcess
+from Parser import ParserProcess
+from Serial import SerialProcess
+from SocketClient import SocketProcess
+from Simulator import SimulatorProcess
+from logger import Logger as Log
+
+
+TAG8 = "Worker"
+
 
 class Worker:
     """
@@ -77,7 +91,7 @@ class Worker:
             self._parser_process.start()
             return True
         else:
-            Logger.i(TAG8, "Port is not available")
+            Log.i(TAG8, "Port is not available")
             return False
 
     def stop(self):
@@ -147,9 +161,6 @@ class Worker:
         """
         return self._data_buffers[idx].get_all()
 
-    def get_last(self, idx=0):
-        return self._data_buffers[idx].get_last()
-
     def get_lines(self):
         """
         Gets the current number of found lines in input data.
@@ -182,7 +193,7 @@ class Worker:
         elif source == SourceType.SocketClient:
             return SocketProcess.get_default_host()
         else:
-            Logger.w(TAG8, "Unknown source selected")
+            Log.w(TAG8, "Unknown source selected")
             return None
 
     @staticmethod
@@ -201,7 +212,7 @@ class Worker:
         elif source == SourceType.SocketClient:
             return SocketProcess.get_default_port()
         else:
-            Logger.w(TAG8, "Unknown source selected")
+            Log.w(TAG8, "Unknown source selected")
             return None
 
     def reset_buffers(self, samples):
@@ -217,4 +228,4 @@ class Worker:
         self._time_buffer = RingBuffer(samples)
         while not self._queue.empty():
             self._queue.get()
-        Logger.i(TAG8, "Buffers cleared")
+        Log.i(TAG8, "Buffers cleared")

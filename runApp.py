@@ -12,13 +12,10 @@ import os
 from PyQt5 import QtCore, QtGui, QtWidgets
 from pyqtgraph import GraphicsLayoutWidget, PlotWidget
 import argparse
-import platform
 import sys
 import logging
 import logging.handlers
 from enum import Enum
-import multiprocessing
-from time import sleep
 from multiprocessing import Queue
 from time import time
 import serial
@@ -30,12 +27,10 @@ import multiprocessing
 from time import strftime, gmtime, sleep
 from pyqtgraph import AxisItem
 import platform
-import string
 from csv import writer
 from datetime import datetime
 from os.path import exists as file_exists
 from pympler.classtracker import ClassTracker
-
 TAG = "AffordableQCM"
 tare =4000000
 density = 0.05
@@ -53,18 +48,15 @@ class Architecture:
         Gets the current OS type of the host.
         :return: OS type by OSType enum.
         """
-        tmp = str(Architecture.get_os_name())
-        if "Linux" in tmp:
+        os_name = str(os.name)
+        if "Linux" in os_name:
             return OSType.linux
-        elif "Windows" in tmp:
+        elif "Windows" in os_name:
             return OSType.windows
-        elif "Darwin" in tmp:
+        elif "Darwin" in os_name:
             return OSType.macosx
         else:
             return OSType.unknown
-
-    @staticmethod
-    def get_os_name():
         """
         Gets the current OS name string of the host (as reported by platform).
         :return: OS name.
@@ -103,7 +95,7 @@ class Architecture:
         :rtype: bool.
         """
         version = sys.version_info
-        if version[0] >= major and version[1] >= minor:
+        if version[0] > major or (version[0] == major and version[1] >= minor):
             return True
         return False
 
@@ -351,11 +343,12 @@ class CSVProcess(multiprocessing.Process):
         Used in run method to recall after a stop is requested, to ensure queue is emptied.
         :return:
         """
-        if not self._store_queue.empty():
-            while not self._store_queue.empty():
+        while not self._store_queue.empty():
+            try:
                 data = self._store_queue.get(timeout=self._timeout / 10)
-                if data is not None:
-                    self._csv.writerow(data)
+            except queue.Empty:
+                data = None
+            self._csv.writerow(data)
 
     def stop(self):
         """
@@ -1860,15 +1853,14 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.cBox_Source.setCurrentIndex(SourceType.serial.value)
 
         self.ui.sBox_Samples.setValue(samples)
-
-        # enable ui
-        self._enable_ui(True)
-        pathname = self.ui.pathLineEdit.text()
-        if pathname== '':
-            pathname="default.csv"
-        with open(pathname, 'w', newline='') as csvfile:
+        self.pathname = self.ui.pathLineEdit.text()
+        if self.pathname == '':
+            self.pathname = "default.csv"
+        self.csv_data = []
+        with open(self.pathname, 'w', newline='') as csvfile:
             fieldnames = ['Absolute Frequency', 'Frequency change', 'Thickness[nm]', 'Timestamp']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
 
             writer.writeheader()
             csvfile.close()
@@ -2016,51 +2008,45 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         :return:
         """
         if self.worker is not None:
-            Logger.i(TAG2, "Changing sample size")
             self.worker.reset_buffers(self.ui.sBox_Samples.value())
 
     def _update_plot(self):
         """
         Updates and redraws the graphics in the plot.
-        This function us connected to the timeout signal of a QTimer.
+        This function is connected to the timeout signal of a QTimer.
         :return:
         """
         self.worker.consume_queue()
         pathname = self.ui.pathLineEdit.text()
         tracker.track_object(self.worker)
         tracker.track_class(Worker)
-        if pathname== '':
-            pathname="default.csv"
-            
-        if not (file_exists(pathname)):
+        if pathname == '':
+            pathname = "default.csv"
+
+        if not file_exists(pathname):
             with open(pathname, 'w', newline='') as csvfile:
                 fieldnames = ['Absolute Frequency', 'Frequency change', 'Thickness[nm]', 'Timestamp']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                pass
                 writer.writeheader()
                 csvfile.close()
         else:
             with open(pathname, 'a', newline='') as f_object:
-               
                 writer_object = csv.writer(f_object)
-                # Pass the list as an argument into
-                # the writerow()
-                xx=[]
-                yy=[]
+                xx = []
+                yy = []
                 for idx in range(self.worker.get_lines()):
-                    
-                    xx=self.worker.get_time_buffer()
-                    yy=self.worker.get_values_buffer(idx)
+                    xx = self.worker.get_time_buffer()
+                    yy = self.worker.get_values_buffer(idx)
                     tracker.track_object(xx)
                     tracker.track_object(yy)
                     tracker.create_snapshot()
                     tracker.stats.print_summary()
                 if xx[0] is not None:
                     self.ui.frequencyLineEdit.setText(str(yy[0]) + " Hz")
-                    List=[yy[0],yy[0]-tare,(yy[0]-tare)/density,datetime.now()]
+                    List = [yy[0], yy[0] - tare, (yy[0] - tare) / density, datetime.now()]
                     writer_object.writerow(List)
-    
-        #Close the file object
+                else:
+                    print("The data list is empty or the first element is None. Skipping plot.")
                 f_object.close()
 
         # plot data
@@ -2072,21 +2058,19 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self._plt_2_changeFreq.clear()
         for idx in range(self.worker.get_lines()):
             self._plt_2_changeFreq.plot(x=self.worker.get_time_buffer(),
-                           y=self.worker.get_values_buffer(idx)-tare,
-                           pen=Constants.plot_colors[idx])
+                                        y=self.worker.get_values_buffer(idx) - tare,
+                                        pen=Constants.plot_colors[idx])
         self._plt6_Freq.clear()
         for idx in range(self.worker.get_lines()):
             self._plt6_Freq.plot(x=self.worker.get_time_buffer(),
-                           y=self.worker.get_values_buffer(idx),
-                           pen=Constants.plot_colors[idx])
-        
+                                 y=self.worker.get_values_buffer(idx),
+                                 pen=Constants.plot_colors[idx])
+
         self.ui.plt_4_thickness.clear()
         for idx in range(self.worker.get_lines()):
             self._plt_4_thickness.plot(x=self.worker.get_time_buffer(),
-                           y=(self.worker.get_values_buffer(idx)-tare)/density,
-                           pen=Constants.plot_colors[idx])
-
-
+                                       y=(self.worker.get_values_buffer(idx) - tare) / density,
+                                       pen=Constants.plot_colors[idx])
 
     def _source_changed(self):
         """
@@ -2117,9 +2101,6 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         :rtype: SourceType.
         """
         return SourceType(self.ui.cBox_Source.currentIndex())
-
-    
-        
 
 
 if __name__ == "__main__":
