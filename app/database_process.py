@@ -3,7 +3,7 @@ import multiprocessing
 from time import sleep
 from datetime import datetime
 from utils.constants import Constants  # Adjust path as needed
-from utils.logger import Logger  # Adjust path as needed
+import logging  # Adjust path as needed
 
 TAG = "DB"
 BATCH_SIZE = 60  # Number of records to batch before committing
@@ -20,13 +20,13 @@ class DatabaseProcess(multiprocessing.Process):
         self._timeout = timeout
         self._conn = None
 
-        Logger.i(TAG, "Database Process ready")
+        logging.info(TAG, "Database Process ready")
 
     def run(self):
         """
         Process monitors the queue and writes data to the SQLite database.
         """
-        Logger.i(TAG, "Database Process starting...")
+        logging.info(TAG, "Database Process starting...")
         self._initialize_database()
         
         while not self._exit.is_set():
@@ -35,7 +35,7 @@ class DatabaseProcess(multiprocessing.Process):
         
         # Final check to empty the queue
         self._consume_queue()
-        Logger.i(TAG, "Database Process finished")
+        logging.info(TAG, "Database Process finished")
 
     def _initialize_database(self):
         """
@@ -85,7 +85,7 @@ class DatabaseProcess(multiprocessing.Process):
         """
         Signal the process to stop.
         """
-        Logger.i(TAG, "Database Process finishing...")
+        logging.info(TAG, "Database Process finishing...")
         self._exit.set()
         if self._conn:
             self._conn.close()

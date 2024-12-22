@@ -1,6 +1,5 @@
 import argparse
-from utils.logger import Logger as Log
-from utils.logger import LoggerLevel
+import logging
 from utils.constants import *
 
 
@@ -80,9 +79,8 @@ class Arguments:
         :return:
         """
         log_to_console = self.get_user_console_log()
-        level = LoggerLevel.INFO
+        level = logging.INFO
         if self._parser.log_level_info:
-            level = LoggerLevel.INFO
+            level = logging.INFO
         elif self._parser.log_level_debug:
-            level = LoggerLevel.DEBUG
-        Log(level, enable_console=log_to_console)
+            level = logging.DEBUG

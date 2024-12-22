@@ -4,7 +4,7 @@ from time import time, sleep
 import numpy as np
 
 from utils.constants import Constants
-from utils.logger import Logger as Log
+import logging as Log
 
 
 TAG = "Simulator"

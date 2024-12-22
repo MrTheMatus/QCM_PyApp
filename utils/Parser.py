@@ -2,7 +2,7 @@ import multiprocessing
 from time import sleep
 
 from utils.constants import Constants
-from utils.logger import Logger
+import logging
 
 
 TAG = "Parser"
@@ -33,7 +33,7 @@ class ParserProcess(multiprocessing.Process):
         self._consumer_timeout = consumer_timeout
         self._split = split
         self._store_reference = store_reference
-        Logger.d(TAG, "Process ready")
+        logging.debug("Process ready")
 
     def add(self, txt):
         """
@@ -50,20 +50,20 @@ class ParserProcess(multiprocessing.Process):
         The process will loop again after timeout if more data is available.
         :return:
         """
-        Logger.d(TAG, "Process starting...")
+        #logging.debug(TAG, "Process starting...")
         while not self._exit.is_set():
             self._consume_queue()
             sleep(self._consumer_timeout)
         # last check on the queue to completely remove data.
         self._consume_queue()
-        Logger.d(TAG, "Process finished")
+        logging.debug("Process finished")
 
     def stop(self):
         """
         Signals the process to stop parsing data.
         :return:
         """
-        Logger.d(TAG, "Process finishing...")
+        logging.debug("Process finishing...")
         self._exit.set()
 
     def _consume_queue(self):
@@ -94,12 +94,12 @@ class ParserProcess(multiprocessing.Process):
                 else:
                     raise TypeError
                 values = [float(v) for v in values]
-                Logger.d(TAG, values)
+                logging.debug(TAG, values)
                 self._out_queue.put((time, values))
                 if self._store_reference is not None:
                     self._store_reference.add(time, values)
             except ValueError:
-                Logger.w(TAG, "Can't convert to float. Raw: {}".format(line.strip()))
+                logging.warning("Can't convert to float. Raw: {}".format(line.strip()))
             except AttributeError:
-                Logger.w(TAG, "Attribute error on type ({}). Raw: {}".format(type(line), line.strip()))
+                logging.warning("Attribute error on type ({}). Raw: {}".format(type(line), line.strip()))
 

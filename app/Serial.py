@@ -7,7 +7,7 @@ from serial.tools import list_ports
 from utils.architecture import Architecture
 from utils.architecture import OSType
 from utils.constants import Constants
-from utils.logger import Logger as Log
+import logging
 
 
 TAG = "Serial"
@@ -27,7 +27,7 @@ class SerialProcess(multiprocessing.Process):
         self._exit = multiprocessing.Event()
         self._parser = parser_process
         self._serial = serial.Serial()
-        Log.i(TAG, "Process ready")
+        logging.info(TAG, "Process ready")
 
     def open(self, port, speed=Constants.serial_default_speed, timeout=Constants.serial_timeout_ms):
         """
@@ -56,27 +56,27 @@ class SerialProcess(multiprocessing.Process):
         If incoming data from serial port can't be converted to float, that data will be discarded.
         :return:
         """
-        Log.i(TAG, "Process starting...")
+        logging.info(TAG, "Process starting...")
         if self._is_port_available(self._serial.port):
             if not self._serial.isOpen():
                 self._serial.open()
-                Log.i(TAG, "Port opened")
+                logging.info(TAG, "Port opened")
                 timestamp = time()
                 while not self._exit.is_set():
                     self._parser.add([time() - timestamp, self._serial.readline()])
-                Log.i(TAG, "Process finished")
+                logging.info(TAG, "Process finished")
                 self._serial.close()
             else:
-                Log.w(TAG, "Port is not opened")
+                logging.warning(TAG, "Port is not opened")
         else:
-            Log.w(TAG, "Port is not available")
+            logging.warning(TAG, "Port is not available")
 
     def stop(self):
         """
         Signals the process to stop acquiring data.
         :return:
         """
-        Log.i(TAG, "Process finishing...")
+        logging.info(TAG, "Process finishing...")
         self._exit.set()
 
     @staticmethod
@@ -92,7 +92,7 @@ class SerialProcess(multiprocessing.Process):
         else:
             found_ports = []
             for port in list(list_ports.comports()):
-                Log.d(TAG, "found device {}".format(port))
+                logging.debug("[{}] found device {}".format(TAG, port))
                 found_ports.append(port.device)
             return found_ports
 

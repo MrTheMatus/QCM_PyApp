@@ -7,7 +7,7 @@ from utils.Parser import ParserProcess
 from app.Serial import SerialProcess
 from app.SocketClient import SocketProcess
 from app.Simulator import SimulatorProcess
-from utils.logger import Logger as Log
+import logging as Log
 
 
 TAG = "Worker"

@@ -1,17 +1,26 @@
 import sys
 from PyQt5 import QtWidgets
 from controlMainWindow import ControlMainWindow
-from utils.logger import Logger
-
 import logging
 
-# Configure logging
 logging.basicConfig(
-    filename="log.txt",  # Log file path
-    filemode="a",        # Append to the log file
+    filename="log.txt",
+    filemode="a",
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.DEBUG  # Set the logging level
+    level=logging.DEBUG
 )
+
+logging.info("Logging test - INFO level")
+logging.debug("Logging test - DEBUG level")
+print("Logging test executed")
+
+
+def sample_method():
+    logging.info("Sample method called")
+    print("Sample method executed")
+
+sample_method()
+
 
 # Example: Redirecting sys.settrace logs
 def trace_calls(frame, event, arg):
@@ -33,10 +42,15 @@ def trace_calls(frame, event, arg):
 if __name__ == "__main__":
     sys.settrace(trace_calls)  # Enable method tracing
 
+    logging.info("Initializing QApplication")
     app = QtWidgets.QApplication(sys.argv)
 
-    # Initialize and show ControlMainWindow directly
-    main_window = ControlMainWindow()
-    main_window.show()
+    logging.info("Initializing ControlMainWindow")
+    window = ControlMainWindow()
 
+    logging.info("Showing Main Window")
+    window.show()
+
+    logging.info("Entering application event loop")
     sys.exit(app.exec_())
+
