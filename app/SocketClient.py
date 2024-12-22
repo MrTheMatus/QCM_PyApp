@@ -4,7 +4,7 @@ from time import time
 import socket
 
 from utils.constants import Constants
-import logging as Log
+import logging
 
 
 TAG = "Socket"
@@ -24,7 +24,7 @@ class SocketProcess(multiprocessing.Process):
         self._exit = multiprocessing.Event()
         self._parser = parser_process
         self._socket_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        Log.i(TAG, "Process Ready")
+        logging.info(TAG, "Process Ready")
 
     def open(self, port='', speed=5555, timeout=0.01):
         """
@@ -42,10 +42,10 @@ class SocketProcess(multiprocessing.Process):
             #self._socket_client.timeout = timeout
             speed = int(speed)
             self._socket_client.connect((port, speed))
-            Log.i(TAG, "Socket open {}:{}".format(port, speed))
+            logging.info(TAG, "Socket open {}:{}".format(port, speed))
             return True
         except socket.timeout:
-            Log.w(TAG, "Connection timeout")
+            logging.warning(TAG, "Connection timeout")
         return False
 
     def run(self):
@@ -53,7 +53,7 @@ class SocketProcess(multiprocessing.Process):
         Reads the socket until a stop call is made.
         :return:
         """
-        Log.i(TAG, "Process starting...")
+        logging.info(TAG, "Process starting...")
         timestamp = time()
 
         while not self._exit.is_set():
@@ -63,15 +63,15 @@ class SocketProcess(multiprocessing.Process):
                 if len(data) > 0:
                     self._parser.add([stamp, data])
             except socket.timeout:
-                Log.w(TAG, "read timeout")
-        Log.i(TAG, "Process finished")
+                logging.warning(TAG, "read timeout")
+        logging.info(TAG, "Process finished")
 
     def stop(self):
         """
         Signals the process to stop acquiring data.
         :return:
         """
-        Log.i(TAG, "Process finishing...")
+        logging.info(TAG, "Process finishing...")
         self._socket_client.close()
         self._exit.set()
 

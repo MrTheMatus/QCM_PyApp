@@ -50,7 +50,7 @@ class ParserProcess(multiprocessing.Process):
         The process will loop again after timeout if more data is available.
         :return:
         """
-        #logging.debug(TAG, "Process starting...")
+        logging.debug(f"{TAG}:, Process starting...")
         while not self._exit.is_set():
             self._consume_queue()
             sleep(self._consumer_timeout)
@@ -94,7 +94,7 @@ class ParserProcess(multiprocessing.Process):
                 else:
                     raise TypeError
                 values = [float(v) for v in values]
-                logging.debug(TAG, values)
+                logging.debug(f"{TAG}: {values}")
                 self._out_queue.put((time, values))
                 if self._store_reference is not None:
                     self._store_reference.add(time, values)

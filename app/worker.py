@@ -7,7 +7,7 @@ from utils.Parser import ParserProcess
 from app.Serial import SerialProcess
 from app.SocketClient import SocketProcess
 from app.Simulator import SimulatorProcess
-import logging as Log
+import logging
 
 
 TAG = "Worker"
@@ -91,7 +91,7 @@ class Worker:
             self._parser_process.start()
             return True
         else:
-            Log.i(TAG, "Port is not available")
+            logging.info(TAG, "Port is not available")
             return False
 
     def stop(self):
@@ -228,4 +228,4 @@ class Worker:
         self._time_buffer = RingBuffer(samples)
         while not self._queue.empty():
             self._queue.get()
-        Log.i(TAG, "Buffers cleared")
+        logging.info("Buffers cleared")

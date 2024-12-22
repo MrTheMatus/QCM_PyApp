@@ -1,7 +1,7 @@
 from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtWidgets import QMainWindow, QListWidgetItem
 from PyQt5.QtCore import QTimer
-from ui.ui_main2 import Ui_AffordableQCM  # Adjust if needed
+from ui.ui_main import Ui_AffordableQCM  # Adjust if needed
 from app.worker import Worker  # Ensure Worker is imported correctly
 from utils.constants import Constants, SourceType  # Adjust the path for your project structure
 import logging
@@ -11,8 +11,13 @@ import csv
 from enum import Enum
 from utils.arguments import Arguments
 from pyqtgraph import AxisItem
+from app.material_library import MaterialLibrary
+from datetime import datetime
+from utils.fileManager import FileManager
 
-
+tare = 6000000
+density = 10
+#todo expand
 
 class ControlMainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, port=None, bd=115200, samples=500):
@@ -32,9 +37,16 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
         # configures
         self.ui.cBox_Source.addItems(Constants.app_sources)
+        # Initialize MaterialLibrary with the database path
+        self.material_library = MaterialLibrary(db_path="deploy/db/database.db")
+        # Initialize the materials_fetched flag
+        #self.materials_fetched = False
+        self.ui.stackedWidget.setCurrentIndex(0)
         self._configure_plot()
         self._configure_timers()
         self._configure_signals()
+
+        #self.installEventFilter(self)
 
         # populate combo box for serial ports
         self._source_changed()
@@ -53,28 +65,21 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
             writer.writeheader()
             csvfile.close()
-
-
-
-        # Configure page navigation
-        self.ui.homeButton.clicked.connect(lambda: self.switch_page(0))
-        self.ui.recordButton.clicked.connect(lambda: self.switch_page(1))
-        self.ui.databaseButton.clicked.connect(lambda: self.switch_page(2))
-        self.ui.plotsButton.clicked.connect(lambda: self.switch_page(3))
-        self.ui.connectionButton.clicked.connect(lambda: self.switch_page(4))
-        self.ui.settingsButton.clicked.connect(lambda: self.switch_page(5))
-        self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
-        self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
-        # self.ui.tareButton.clicked(tare = lambda: self.ui.frequencyLineEdit()) 
-
+    
     def switch_page(self, index):
-        """Switch to the specified page in the QStackedWidget."""
+        """
+        Switch to the specified page in the QStackedWidget.
+        Fetch materials if navigating to the materials page.
+        """
         if 0 <= index < self.ui.stackedWidget.count():
             self.ui.stackedWidget.setCurrentIndex(index)
             logging.info(f"Switched to page {index}: {self.ui.stackedWidget.currentWidget().objectName()}")
+            
+            # Fetch materials if navigating to the materials page
+            if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
+                self.load_materials()
         else:
             logging.warning(f"Invalid page index: {index}")
-
 
     def start(self):
         """
@@ -185,12 +190,30 @@ class ControlMainWindow(QtWidgets.QMainWindow):
     def _configure_signals(self):
         """
         Configures the connections between signals and UI elements.
-        :return:
         """
-        self.ui.pButton_Start.clicked.connect(self.start)
-        self.ui.pButton_Stop.clicked.connect(self.stop)
-        self.ui.sBox_Samples.valueChanged.connect(self._update_sample_size)
-        self.ui.cBox_Source.currentIndexChanged.connect(self._source_changed)
+        # Material management
+        self.ui.fetchButton.clicked.connect(self.load_materials)  # Fetch and display materials
+        self.ui.addButton.clicked.connect(self.add_material)      # Add a new material
+        self.ui.updateButton.clicked.connect(self.update_material)  # Update an existing material
+        self.ui.deleteButton.clicked.connect(self.delete_material)  # Delete the selected material
+        self.ui.materialsListWidget.itemClicked.connect(self.populate_material_form)  # Populate form when item is clicked
+
+        # General app actions
+        self.ui.pButton_Start.clicked.connect(self.start)  # Start acquisition
+        self.ui.pButton_Stop.clicked.connect(self.stop)    # Stop acquisition
+        self.ui.sBox_Samples.valueChanged.connect(self._update_sample_size)  # Update sample size
+        self.ui.cBox_Source.currentIndexChanged.connect(self._source_changed)  # Handle source change
+
+        # Page navigation
+        self.ui.homeButton.clicked.connect(lambda: self.switch_page(0))
+        self.ui.recordButton.clicked.connect(lambda: self.switch_page(1))
+        self.ui.databaseButton.clicked.connect(lambda: self.switch_page(2))
+        self.ui.plotsButton.clicked.connect(lambda: self.switch_page(3))
+        self.ui.connectionButton.clicked.connect(lambda: self.switch_page(4))
+        self.ui.settingsButton.clicked.connect(lambda: self.switch_page(5))
+        self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
+        self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
+
 
     def _update_sample_size(self):
         """
@@ -213,7 +236,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         if pathname== '':
             pathname="default.csv"
             
-        if not (file_exists(pathname)):
+        if not (FileManager.file_exists(pathname)):
             with open(pathname, 'w', newline='') as csvfile:
                 fieldnames = ['Absolute Frequency', 'Frequency change', 'Thickness[nm]', 'Timestamp']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -299,37 +322,40 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.materialsListWidget.clear()
         materials = self.material_library.get_materials()
         if not materials:
-            #logging.warning("ControlMainWindow", "No materials found in the database.")
+            logging.warning("No materials found in the database.")
             return
         for material in materials:
-            item = QListWidgetItem(f"{material['name']} ({material['density']} {material['unit']})")
-            item.setData(QtCore.Qt.UserRole, material['id'])  # Store material ID in the item
+            item = QListWidgetItem(f"{material['name']} ({material['density']} g/cm³)")
+            item.setData(QtCore.Qt.UserRole, material['id'])
             self.ui.materialsListWidget.addItem(item)
+
 
     def add_material(self):
         """Add a new material to the database."""
         name = self.ui.materialEditLineEdit.text()
         density = self.ui.densityEditLineEdit.text()
-        unit = self.ui.materialunitComboBox.currentText()
 
-        if name and density and unit:
-            self.material_library.add_material(name, float(density), unit)
+        if name and density:
+            self.material_library.add_material(name, float(density))
             self.load_materials()
+
+
 
     def update_material(self):
         """Update the selected material in the database."""
         selected_item = self.ui.materialsListWidget.currentItem()
         if not selected_item:
+            logging.warning("No material selected for update.")
             return
 
         material_id = selected_item.data(QtCore.Qt.UserRole)
         name = self.ui.materialEditLineEdit.text()
         density = self.ui.densityEditLineEdit.text()
-        unit = self.ui.materialunitComboBox.currentText()
 
-        if name and density and unit:
-            self.material_library.update_material(material_id, name, float(density), unit)
+        if name and density:
+            self.material_library.update_material(material_id, name, float(density))
             self.load_materials()
+
 
     def delete_material(self):
         """Delete the selected material from the database."""
@@ -340,6 +366,30 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         material_id = selected_item.data(QtCore.Qt.UserRole)
         self.material_library.delete_material(material_id)
         self.load_materials()
+
+    def populate_material_form(self, item):
+        """
+        Populate the form fields with the selected material's data.
+        
+        :param item: The QListWidgetItem that was clicked.
+        """
+        # Get the material ID stored in the item's data
+        material_id = item.data(QtCore.Qt.UserRole)
+        
+        # Fetch the material details from the database
+        material = self.material_library.get_material_by_id(material_id)
+
+        # Populate the form fields with the material details
+        if material:
+            self.ui.materialEditLineEdit.setText(material['name'])
+            self.ui.densityEditLineEdit.setText(str(material['density']))
+            logging.info(f"Material form populated with ID {material_id}: {material}")
+        else:
+            logging.warning(f"Material with ID {material_id} not found")
+
+
+
+    
 
 
         

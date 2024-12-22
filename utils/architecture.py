@@ -2,7 +2,8 @@ from enum import Enum
 from pyqtgraph import AxisItem
 import sys
 import platform
-
+import logging
+import argparse
 class Architecture:
     """
     Wrappers for architecture specific methods.
@@ -163,7 +164,6 @@ class Arguments:
             level = logging.INFO
         elif self._parser.log_level_debug:
             level = logging.DEBUG
-        Logger(level, enable_console=log_to_console)
 
 class SourceType(Enum):
     """

@@ -1,7 +1,13 @@
-from logger import Logger
+import logging
 import multiprocessing
 import serial
+from serial.tools import list_ports
 from constants import Constants
+from architecture import Architecture, OSType
+import time
+from time import sleep
+import socket
+import numpy as np
 class SerialProcess(multiprocessing.Process):
     """
     Wrapper for serial package into a multiprocessing instance.
@@ -56,9 +62,9 @@ class SerialProcess(multiprocessing.Process):
                 logging.info(TAG, "Process finished")
                 self._serial.close()
             else:
-                #logging.warning(TAG, "Port is not opened")
+                logging.warning("Port is not opened")
         else:
-            #logging.warning(TAG, "Port is not available")
+                logging.warning("Port is not available")
 
     def stop(self):
         """
@@ -81,7 +87,7 @@ class SerialProcess(multiprocessing.Process):
         else:
             found_ports = []
             for port in list(list_ports.comports()):
-                #logging.debug(TAG, "found device {}".format(port))
+                logging.debug("{}, found device {}".format(TAG, port))
                 found_ports.append(port.device)
             return found_ports
 
@@ -220,7 +226,7 @@ class SocketProcess(multiprocessing.Process):
             logging.info(TAG, "Socket open {}:{}".format(port, speed))
             return True
         except socket.timeout:
-            #logging.warning(TAG, "Connection timeout")
+            logging.warning("Connection timeout")
         return False
 
     def run(self):
@@ -238,7 +244,7 @@ class SocketProcess(multiprocessing.Process):
                 if len(data) > 0:
                     self._parser.add([stamp, data])
             except socket.timeout:
-                #logging.warning(TAG, "read timeout")
+                logging.warning("read timeout")
         logging.info(TAG, "Process finished")
 
     def stop(self):
