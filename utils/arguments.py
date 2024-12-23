@@ -53,7 +53,7 @@ class Arguments:
         if self._parser is not None:
             self._parse_log_level()
         else:
-            Log.w(TAG, "Parser was not created !")
+            logging.warning(  "Parser was not created !")
             return None
 
     def get_user_samples(self):

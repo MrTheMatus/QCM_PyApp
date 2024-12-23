@@ -24,7 +24,7 @@ class SimulatorProcess(multiprocessing.Process):
         self._exit = multiprocessing.Event()
         self._period = None
         self._parser = parser_process
-        logging.info(TAG, "Process Ready")
+        logging.info(f"{TAG}: Process ready")
 
     def open(self, port=None, speed=Constants.simulator_default_speed, timeout=0.5):
         """
@@ -39,7 +39,7 @@ class SimulatorProcess(multiprocessing.Process):
         :rtype: bool.
         """
         self._period = float(speed)
-        logging.info(TAG, "Using sample rate at {}".format(self._period))
+        logging.info(  "Using sample rate at {}".format(self._period))
         return True
 
     def run(self):
@@ -47,7 +47,7 @@ class SimulatorProcess(multiprocessing.Process):
         Simulates raw data incoming as CSV.
         :return:
         """
-        logging.info(TAG, "Process starting...")
+        logging.info(  "Process starting...")
         timestamp = time()
         coef = 2 * np.pi
         while not self._exit.is_set():
@@ -55,14 +55,14 @@ class SimulatorProcess(multiprocessing.Process):
             self._parser.add([stamp, str(("{},{}\r\n".format(np.sin(coef * stamp), np.cos(coef * stamp))))
                              .encode(Constants.app_encoding)])
             sleep(self._period)
-        logging.info(TAG, "Process finished")
+        logging.info(  "Process finished")
 
     def stop(self):
         """
         Signals the process to stop acquiring data.
         :return:
         """
-        logging.info(TAG, "Process finishing...")
+        logging.info(  "Process finishing...")
         self._exit.set()
 
     @staticmethod

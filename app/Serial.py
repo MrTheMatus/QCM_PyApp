@@ -27,7 +27,8 @@ class SerialProcess(multiprocessing.Process):
         self._exit = multiprocessing.Event()
         self._parser = parser_process
         self._serial = serial.Serial()
-        logging.info(TAG, "Process ready")
+        logging.info(f"{TAG}: Process ready")
+
 
     def open(self, port, speed=Constants.serial_default_speed, timeout=Constants.serial_timeout_ms):
         """
@@ -56,27 +57,27 @@ class SerialProcess(multiprocessing.Process):
         If incoming data from serial port can't be converted to float, that data will be discarded.
         :return:
         """
-        logging.info(TAG, "Process starting...")
+        logging.info(  "Process starting...")
         if self._is_port_available(self._serial.port):
             if not self._serial.isOpen():
                 self._serial.open()
-                logging.info(TAG, "Port opened")
+                logging.info(  "Port opened")
                 timestamp = time()
                 while not self._exit.is_set():
                     self._parser.add([time() - timestamp, self._serial.readline()])
-                logging.info(TAG, "Process finished")
+                logging.info(  "Process finished")
                 self._serial.close()
             else:
-                logging.warning(TAG, "Port is not opened")
+                logging.warning(  "Port is not opened")
         else:
-            logging.warning(TAG, "Port is not available")
+            logging.warning(  "Port is not available")
 
     def stop(self):
         """
         Signals the process to stop acquiring data.
         :return:
         """
-        logging.info(TAG, "Process finishing...")
+        logging.info(  "Process finishing...")
         self._exit.set()
 
     @staticmethod
@@ -92,7 +93,7 @@ class SerialProcess(multiprocessing.Process):
         else:
             found_ports = []
             for port in list(list_ports.comports()):
-                logging.debug("[{}] found device {}".format(TAG, port))
+                logging.debug("found device")
                 found_ports.append(port.device)
             return found_ports
 

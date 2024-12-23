@@ -32,7 +32,7 @@ class CSVProcess(multiprocessing.Process):
         if filename is None:
             filename = strftime(Constants.csv_default_filename, gmtime())
         self._file = self._create_file(filename, path=path)
-        logging.info(TAG, "Process ready")
+        logging.info(f"{TAG}: Process ready")
 
     def add(self, time, values):
         """
@@ -54,14 +54,14 @@ class CSVProcess(multiprocessing.Process):
         and the process will loop again after timeout if more data is available.
         :return:
         """
-        logging.info(TAG, "Process starting...")
+        logging.info(  "Process starting...")
         self._csv = csv.writer(self._file, delimiter=Constants.csv_delimiter, quoting=csv.QUOTE_MINIMAL)
         while not self._exit.is_set():
             self._consume_queue()
             sleep(self._timeout)
         # last check on the queue to completely remove data.
         self._consume_queue()
-        logging.info(TAG, "Process finished")
+        logging.info(  "Process finished")
         self._file.close()
 
     def _consume_queue(self):
@@ -81,7 +81,7 @@ class CSVProcess(multiprocessing.Process):
         Signals the process to stop storing data.
         :return:
         """
-        logging.info(TAG, "Process finishing...")
+        logging.info(  "Process finishing...")
         self._exit.set()
 
     @staticmethod
@@ -99,6 +99,6 @@ class CSVProcess(multiprocessing.Process):
         FileManager.create_dir(path)
         full_path = FileManager.create_file(filename, extension=extension, path=path)
         if not FileManager.file_exists(full_path):
-            logging.info(TAG, "Storing in {}".format(full_path))
+            logging.info(  "Storing in {}".format(full_path))
             return open(full_path, "a", newline='')
         return None

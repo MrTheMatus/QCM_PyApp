@@ -14,6 +14,7 @@ from pyqtgraph import AxisItem
 from app.material_library import MaterialLibrary
 from datetime import datetime
 from utils.fileManager import FileManager
+import sqlite3
 
 tare = 6000000
 density = 10
@@ -25,6 +26,18 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui = Ui_AffordableQCM()
         self.ui.setupUi(self)
         self.setWindowTitle("Control Main Window")
+        
+
+        self.db_path = "deploy/db/database.db"
+        self.process_id = None  # Assign this when a process starts
+        self.conn = self._initialize_db_connection()
+
+        # Flag to track recording state
+        self.is_recording = False
+        self.process_id = None
+        self.x_data = []
+        self.y_data = []
+
 
         self._plt = None
         self.plt_4_thickness = None
@@ -87,7 +100,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         This function is connected to the clicked signal of the Start button.
         :return:
         """
-        logging.info("TAG", "Clicked start")
+        logging.info("TAG Clicked start")
         self.worker = Worker(port=self.ui.cBox_Port.currentText(),
                              speed=float(self.ui.cBox_Speed.currentText()),
                              samples=self.ui.sBox_Samples.value(),
@@ -97,7 +110,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             self._timer_plot.start(Constants.plot_update_ms)
             self._enable_ui(False)
         else:
-            logging.info("TAG", "Port is not available")
+            logging.info("TAG Port is not available")
             PopUp.warning(self, Constants.app_title, "Selected port \"{}\" is not available"
                           .format(self.ui.cBox_Port.currentText()))
 
@@ -107,7 +120,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         This function is connected to the clicked signal of the Stop button.
         :return:
         """
-        logging.info("TAG", "Clicked stop")
+        logging.info("TAG Clicked stop")
         self._timer_plot.stop()
         self._enable_ui(True)
         self.worker.stop()
@@ -120,7 +133,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         :return:
         """
         if self.worker.is_running():
-            logging.info("TAG", "Window closed without stopping capture, stopping it")
+            logging.info("TAG Window closed without stopping capture, stopping it")
             self.stop()
 
     def _enable_ui(self, enabled):
@@ -206,13 +219,29 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
         # Page navigation
         self.ui.homeButton.clicked.connect(lambda: self.switch_page(0))
-        self.ui.recordButton.clicked.connect(lambda: self.switch_page(1))
+        self.ui.recordButton.clicked.connect(self.toggle_recording)
         self.ui.databaseButton.clicked.connect(lambda: self.switch_page(2))
         self.ui.plotsButton.clicked.connect(lambda: self.switch_page(3))
         self.ui.connectionButton.clicked.connect(lambda: self.switch_page(4))
         self.ui.settingsButton.clicked.connect(lambda: self.switch_page(5))
         self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
         self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
+
+        
+
+    def toggle_recording(self):
+        if self.is_recording:
+            # Stop recording
+            self.stop_recording()
+            self.ui.recordButton.setText("Start Recording")
+            self.is_recording = False
+        else:
+            # Start recording
+            self.start_recording()
+            self.ui.recordButton.setText("Stop Recording")
+            self.is_recording = True
+
+
 
 
     def _update_sample_size(self):
@@ -222,7 +251,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         :return:
         """
         if self.worker is not None:
-            logging.info("TAG", "Changing sample size")
+            logging.info("TAG Changing sample size")
             self.worker.reset_buffers(self.ui.sBox_Samples.value())
 
     def _update_plot(self):
@@ -249,16 +278,21 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                 writer_object = csv.writer(f_object)
                 # Pass the list as an argument into
                 # the writerow()
-                xx=[]
-                yy=[]
+                x_data=[]
+                y_data=[]
                 for idx in range(self.worker.get_lines()):
-                    xx=self.worker.get_time_buffer()
-                    yy=self.worker.get_values_buffer(idx)
-                if xx[0] is not None:
-                    self.ui.frequencyLineEdit.setText(str(yy[0]) + " Hz")
-                    List=[yy[0],yy[0]-tare,(yy[0]-tare)/density,datetime.now()]
+                    x_data=self.worker.get_time_buffer()
+                    y_data=self.worker.get_values_buffer(idx)
+                if len(x_data) > 0 and x_data[0] is not None:
+                    self.ui.frequencyLineEdit.setText(str(y_data[0]) + " Hz")
+                    List=[y_data[0],y_data[0]-tare,(y_data[0]-tare)/density,datetime.now()]
                     writer_object.writerow(List)
-    
+                    self.x_data.append(datetime.now())
+                    self.y_data.append(y_data[0])
+                   # Proceed with processing
+                else:
+                    logging.warning("x_data is empty or does not have a valid first element")
+                    
         #Close the file object
                 f_object.close()
 
@@ -387,6 +421,144 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         else:
             logging.warning(f"Material with ID {material_id} not found")
 
+    def _initialize_db_connection(self):
+        try:
+            self.conn = sqlite3.connect(self.db_path)
+            self.cursor = self.conn.cursor()
+            print("Database connection initialized.")
+        except sqlite3.Error as e:
+            print(f"Error connecting to database: {e}")
+
+    def _save_plot_data(self, x_data, y_data):
+        """
+        Saves plot data into the ProcessData table for the current process.
+        :param x_data: List of frequency changes (or x-axis data).
+        :param y_data: List of absolute frequencies (or y-axis data).
+        """
+        if self.process_id is None:
+            logging.warning("No active process. Data will not be saved.")
+            return
+
+        if not x_data or not y_data:
+            logging.warning("No data to save in ProcessData.")
+            return
+
+        try:
+            with self.conn:
+                cursor = self.conn.cursor()
+                # Calculate rate of change
+                rate_of_change = self._calculate_rate_of_change(x_data)
+
+                for x, y in zip(x_data, y_data):
+                    cursor.execute("""
+                        INSERT INTO ProcessData (
+                            process_id, frequency, frequency_change, frequency_rate_of_change, unit
+                        ) VALUES (?, ?, ?, ?, ?)
+                    """, (self.process_id, y, x, rate_of_change, "Hz"))
+            
+            logging.info(f"Process data successfully saved for process_id {self.process_id}.")
+        except Exception as e:
+            logging.error(f"Error saving process data: {e}")
+
+
+    def _calculate_rate_of_change(self, x_data):
+        """
+        Calculates the rate of change as the average of the last 500 entries in x_data.
+        If there are fewer than 500 entries, it calculates the average for all entries.
+        :param x_data: List of frequency changes (x-axis data).
+        :return: Average rate of change.
+        """
+        if len(x_data) < 2:
+            return 0.0  # No meaningful rate of change if less than 2 points.
+
+        recent_values = x_data[-500:] if len(x_data) > 500 else x_data
+        rate_of_change = sum(abs(recent_values[i] - recent_values[i - 1]) for i in range(1, len(recent_values))) / len(recent_values)
+        return rate_of_change
+
+    def start_recording(self):
+        # Initialize process in the database
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO Process (process_name, start_time) VALUES (?, ?)
+                """,
+                ("Recording", datetime.now()),
+            )
+            self.process_id = cursor.lastrowid
+            conn.commit()
+            logging.info(f"Recording started with process ID: {self.process_id}")
+        except sqlite3.Error as e:
+            logging.error(f"Failed to start recording: {e}")
+        finally:
+            conn.close()
+
+
+    def stop_recording(self):
+        # Finalize process and save data
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE Process SET end_time = ? WHERE process_id = ?
+                """,
+                (datetime.now(), self.process_id),
+            )
+            conn.commit()
+            logging.info(f"Recording stopped for process ID: {self.process_id}")
+        except sqlite3.Error as e:
+            logging.error(f"Failed to stop recording: {e}")
+        finally:
+            conn.close()
+        
+        self._save_plot_data(self.x_data, self.y_data)
+
+
+    def _save_plot_data(self, x_data, y_data):
+        if not self.process_id:  # Ensure process_id exists
+            logging.error("No process ID available. Cannot save data.")
+            return
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.cursor()
+            for x, y in zip(x_data, y_data):
+                cursor.execute(
+                    """
+                    INSERT INTO ProcessData (process_id, frequency, frequency_change, frequency_rate_of_change, unit)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (self.process_id, x, 0.0, 0.0, "Hz"),  # Adjust `frequency_change` and `frequency_rate_of_change` as needed
+                )
+            conn.commit()
+            logging.info("Plot data saved to database.")
+        except sqlite3.Error as e:
+            logging.error(f"Failed to save plot data: {e}")
+        finally:
+            conn.close()
+
+
+    def _calculate_rate_of_change(self, x_data):
+        """
+        Calculates the rate of change as the average of the last 500 entries.
+        """
+        if len(x_data) < 2:
+            return 0.0
+        return sum(abs(x_data[i] - x_data[i - 1]) for i in range(1, len(x_data[-500:]))) / min(len(x_data), 500)
+
+    def _initialize_db_connection(self):
+        """
+        Initializes and returns a database connection.
+        """
+        try:
+            conn = sqlite3.connect("deploy/db/database.db")
+            logging.info("Database connection established.")
+            return conn
+        except Exception as e:
+            logging.error(f"Error connecting to the database: {e}")
+            raise
 
 
     

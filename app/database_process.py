@@ -20,13 +20,13 @@ class DatabaseProcess(multiprocessing.Process):
         self._timeout = timeout
         self._conn = None
 
-        logging.info(TAG, "Database Process ready")
+        logging.info(  "Database Process ready")
 
     def run(self):
         """
         Process monitors the queue and writes data to the SQLite database.
         """
-        logging.info(TAG, "Database Process starting...")
+        logging.info(  "Database Process starting...")
         self._initialize_database()
         
         while not self._exit.is_set():
@@ -35,7 +35,7 @@ class DatabaseProcess(multiprocessing.Process):
         
         # Final check to empty the queue
         self._consume_queue()
-        logging.info(TAG, "Database Process finished")
+        logging.info(  "Database Process finished")
 
     def _initialize_database(self):
         """
@@ -85,7 +85,7 @@ class DatabaseProcess(multiprocessing.Process):
         """
         Signal the process to stop.
         """
-        logging.info(TAG, "Database Process finishing...")
+        logging.info(  "Database Process finishing...")
         self._exit.set()
         if self._conn:
             self._conn.close()

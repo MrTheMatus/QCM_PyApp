@@ -91,7 +91,7 @@ class Worker:
             self._parser_process.start()
             return True
         else:
-            logging.info(TAG, "Port is not available")
+            logging.info(  "Port is not available")
             return False
 
     def stop(self):
@@ -193,7 +193,7 @@ class Worker:
         elif source == SourceType.SocketClient:
             return SocketProcess.get_default_host()
         else:
-            Log.w(TAG, "Unknown source selected")
+            logging.warning(  "Unknown source selected")
             return None
 
     @staticmethod
@@ -212,7 +212,7 @@ class Worker:
         elif source == SourceType.SocketClient:
             return SocketProcess.get_default_port()
         else:
-            Log.w(TAG, "Unknown source selected")
+            logging.warning(  "Unknown source selected")
             return None
 
     def reset_buffers(self, samples):
