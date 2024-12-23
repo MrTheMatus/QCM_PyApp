@@ -21,13 +21,14 @@ class Constants:
     app_sources = ["Serial", "Simulator", "Socket Client"]
     app_encoding = "utf-8"
 
+
     '''
     TODO 
     custom change: slowing down the update of the timer 
     the QCM data rate is 1 sample/sec 
     '''
     # plot_update_ms = 16
-    plot_update_ms = 100
+    plot_update_ms = 1000
     plot_xlabel_title = "Time"
     plot_xlabel_unit = "s"
     plot_colors = ['#0072bd', '#d95319', '#edb120', '#7e2f8e', '#77ac30', '#4dbeee', '#a2142f']

@@ -1,24 +1,17 @@
-from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QMainWindow, QListWidgetItem
+from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtWidgets import QListWidgetItem
 from PyQt5.QtCore import QTimer
-from ui.ui_main import Ui_AffordableQCM  # Adjust if needed
-from app.worker import Worker  # Ensure Worker is imported correctly
-from utils.constants import Constants, SourceType  # Adjust the path for your project structure
-import logging
-from utils.popUp import PopUp  # Adjust the path for Logger and PopUp classes
-from utils.CSVProcess import CSVProcess
-import csv
-from enum import Enum
-from utils.arguments import Arguments
 from pyqtgraph import AxisItem
-from app.material_library import MaterialLibrary
 from datetime import datetime
-from utils.fileManager import FileManager
+import logging
 import sqlite3
-
-tare = 6000000
-density = 10
-#todo expand
+import csv
+from ui.ui_main import Ui_AffordableQCM
+from app.worker import Worker
+from utils.constants import Constants, SourceType
+from utils.fileManager import FileManager
+from app.material_library import MaterialLibrary
+from utils.popUp import PopUp
 
 class ControlMainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, port=None, bd=115200, samples=500):
@@ -26,179 +19,45 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui = Ui_AffordableQCM()
         self.ui.setupUi(self)
         self.setWindowTitle("Control Main Window")
-        
 
+        # Attributes
         self.db_path = "deploy/db/database.db"
-        self.process_id = None  # Assign this when a process starts
-        self.conn = self._initialize_db_connection()
-
-        # Flag to track recording state
-        self.is_recording = False
         self.process_id = None
-        self.x_data = []
-        self.y_data = []
-
-
-        self._plt = None
-        self.plt_4_thickness = None
-
-        self.plt6_Freq = None
-        self._timer_plot = None
-        self.plt_2_changeFreq = None
-        
+        self.is_recording = False
+        self.x_data, self.y_data = [], []
         self.worker = Worker()
+        self.material_library = MaterialLibrary(db_path=self.db_path)
 
-        # configures
-        self.ui.cBox_Source.addItems(Constants.app_sources)
-        # Initialize MaterialLibrary with the database path
-        self.material_library = MaterialLibrary(db_path="deploy/db/database.db")
-        # Initialize the materials_fetched flag
-        #self.materials_fetched = False
-        self.ui.stackedWidget.setCurrentIndex(0)
+        # Configure UI and functionality
+        self._configure_ui(samples)
         self._configure_plot()
         self._configure_timers()
         self._configure_signals()
+        self._initialize_db_connection()
 
-        #self.installEventFilter(self)
-
-        # populate combo box for serial ports
-        self._source_changed()
+    def _configure_ui(self, samples):
+        """Configure UI elements."""
+        self.ui.cBox_Source.addItems(Constants.app_sources)
         self.ui.cBox_Source.setCurrentIndex(SourceType.serial.value)
-
         self.ui.sBox_Samples.setValue(samples)
-
-        # enable ui
-        self._enable_ui(True)
-        pathname = self.ui.pathLineEdit.text()
-        if pathname== '':
-            pathname="default.csv"
-        with open(pathname, 'w', newline='') as csvfile:
-            fieldnames = ['Absolute Frequency', 'Frequency change', 'Thickness[nm]', 'Timestamp']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-            writer.writeheader()
-            csvfile.close()
-    
-    def switch_page(self, index):
-        """
-        Switch to the specified page in the QStackedWidget.
-        Fetch materials if navigating to the materials page.
-        """
-        if 0 <= index < self.ui.stackedWidget.count():
-            self.ui.stackedWidget.setCurrentIndex(index)
-            logging.info(f"Switched to page {index}: {self.ui.stackedWidget.currentWidget().objectName()}")
-            
-            # Fetch materials if navigating to the materials page
-            if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
-                self.load_materials()
-        else:
-            logging.warning(f"Invalid page index: {index}")
-
-    def start(self):
-        """
-        Starts the acquisition of the selected serial port.
-        This function is connected to the clicked signal of the Start button.
-        :return:
-        """
-        logging.info("TAG Clicked start")
-        self.worker = Worker(port=self.ui.cBox_Port.currentText(),
-                             speed=float(self.ui.cBox_Speed.currentText()),
-                             samples=self.ui.sBox_Samples.value(),
-                             source=self._get_source(),
-                             export_enabled=self.ui.chBox_export.isChecked())
-        if self.worker.start():
-            self._timer_plot.start(Constants.plot_update_ms)
-            self._enable_ui(False)
-        else:
-            logging.info("TAG Port is not available")
-            PopUp.warning(self, Constants.app_title, "Selected port \"{}\" is not available"
-                          .format(self.ui.cBox_Port.currentText()))
-
-    def stop(self):
-        """
-        Stops the acquisition of the selected serial port.
-        This function is connected to the clicked signal of the Stop button.
-        :return:
-        """
-        logging.info("TAG Clicked stop")
-        self._timer_plot.stop()
-        self._enable_ui(True)
-        self.worker.stop()
-
-    def closeEvent(self, evnt):
-        """
-        Overrides the QTCloseEvent.
-        This function is connected to the clicked signal of the close button of the window.
-        :param evnt: QT evnt.
-        :return:
-        """
-        if self.worker.is_running():
-            logging.info("TAG Window closed without stopping capture, stopping it")
-            self.stop()
-
-    def _enable_ui(self, enabled):
-        """
-        Enables or disables the UI elements of the window.
-        :param enabled: The value to be set at the enabled characteristic of the UI elements.
-        :type enabled: bool
-        :return:
-        """
-        self.ui.cBox_Port.setEnabled(enabled)
-        self.ui.cBox_Speed.setEnabled(enabled)
-        self.ui.pButton_Start.setEnabled(enabled)
-        self.ui.chBox_export.setEnabled(enabled)
-        self.ui.cBox_Source.setEnabled(enabled)
-        self.ui.pButton_Stop.setEnabled(not enabled)
+        self.ui.recordButton.setIcon(QtGui.QIcon(".\\images\\play.png"))
+        self._update_ports_and_speeds()
 
     def _configure_plot(self):
-        """
-        Configures specific elements of the PyQtGraph plots.
-        :return:
-        """
-        self._yaxis = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='Frequency', units='Hz')
-        self._yaxis.setFixedWidth(77)
-        self._yaxis.setWidth(77)
-
-        self._yaxis2 = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='thickness', units='nm')
-        self._yaxis2.setFixedWidth(77)
-        self._yaxis2.setWidth(77)
-
-        self._yaxis3 = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='Frequency', units='Hz')
-        self._yaxis3.setFixedWidth(77)
-        self._yaxis3.setWidth(77)
-
-        self._yaxis4 = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='Frequency', units='Hz')
-        self._yaxis4.setFixedWidth(77)
-        self._yaxis4.setWidth(77)
-
-        self._yaxis.setLabel(show=True)
-        self._yaxis.setGrid(grid=True)
-        #self.ui.plt.setBackground(background=None)
-        self.ui.plt.setAntialiasing(True)
-        self._plt = self.ui.plt.addPlot(row=0, col=0, axisItems={'left':self._yaxis})
+        """Set up plots with customized axes."""
+        self._yaxis = self._create_axis("Frequency", "Hz")
+        self._plt = self.ui.plt.addPlot(axisItems={'left': self._yaxis})
         self._plt.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
 
-        self.ui.plt_4_thickness.setAntialiasing(True)
-        self._plt_4_thickness = self.ui.plt_4_thickness.addPlot(row=0, col=0, axisItems={'left':self._yaxis2})
-        self._plt_4_thickness.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
-
-
-        self.ui.plt6_Freq.setAntialiasing(True)
-        self._plt6_Freq = self.ui.plt6_Freq.addPlot(row=0, col=0, axisItems={'left':self._yaxis3})
-        self._plt6_Freq.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
-
-        self.ui.plt_2_changeFreq.setAntialiasing(True)
-        self._plt_2_changeFreq = self.ui.plt_2_changeFreq.addPlot(row=0, col=0, axisItems={'left':self._yaxis4})
-        self._plt_2_changeFreq.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
-
+    def _create_axis(self, label, unit):
+        axis = AxisItem('left', maxTickLength=-5, showValues=True, text=label, units=unit)
+        axis.setFixedWidth(77)
+        return axis
 
     def _configure_timers(self):
-        """
-        Configures specific elements of the QTimers.
-        :return:
-        """
-        self._timer_plot = QtCore.QTimer(self)
-        self._timer_plot.timeout.connect(self._update_plot)
+        """Configure timers for batch saving and plot updates."""
+        self.plot_timer = QTimer(self)
+        self.plot_timer.timeout.connect(self._update_plot)
 
     def _configure_signals(self):
         """
@@ -227,342 +86,253 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
         self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
 
-        
+
+    def start(self):
+        """Start data acquisition."""
+        self.worker = Worker(
+            port=self.ui.cBox_Port.currentText(),
+            speed=float(self.ui.cBox_Speed.currentText()),
+            samples=self.ui.sBox_Samples.value(),
+            source=self._get_source(),
+            export_enabled=self.ui.chBox_export.isChecked()
+        )
+        if self.worker.start():
+            self.plot_timer.start(Constants.plot_update_ms)
+            self._toggle_ui(False)
+        else:
+            PopUp.warning(self, Constants.app_title, f"Port {self.ui.cBox_Port.currentText()} is not available")
+
+    def stop(self):
+        """Stop data acquisition."""
+        self.plot_timer.stop()
+        self.worker.stop()
+        self._toggle_ui(True)
 
     def toggle_recording(self):
+        """Toggle recording state and update the button icon."""
+        self.is_recording = not self.is_recording
+        icon_path = ".\\images\\stop-button.png" if self.is_recording else ".\\images\\play.png"
+        self.ui.recordButton.setIcon(QtGui.QIcon(icon_path))
         if self.is_recording:
-            # Stop recording
-            self.stop_recording()
-            self.ui.recordButton.setText("Start Recording")
-            self.is_recording = False
-        else:
-            # Start recording
             self.start_recording()
-            self.ui.recordButton.setText("Stop Recording")
-            self.is_recording = True
-
-
-
-
-    def _update_sample_size(self):
-        """
-        Updates the sample size of the plot.
-        This function is connected to the valueChanged signal of the sample Spin Box.
-        :return:
-        """
-        if self.worker is not None:
-            logging.info("TAG Changing sample size")
-            self.worker.reset_buffers(self.ui.sBox_Samples.value())
+        else:
+            self.stop_recording()
 
     def _update_plot(self):
-        """
-        Updates and redraws the graphics in the plot.
-        This function us connected to the timeout signal of a QTimer.
-        :return:
-        """
+        """Update plot with data from Worker."""
         self.worker.consume_queue()
-        pathname = self.ui.pathLineEdit.text()
-        if pathname== '':
-            pathname="default.csv"
-            
-        if not (FileManager.file_exists(pathname)):
-            with open(pathname, 'w', newline='') as csvfile:
-                fieldnames = ['Absolute Frequency', 'Frequency change', 'Thickness[nm]', 'Timestamp']
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                pass
-                writer.writeheader()
-                csvfile.close()
-        else:
-            with open(pathname, 'a', newline='') as f_object:
-               
-                writer_object = csv.writer(f_object)
-                # Pass the list as an argument into
-                # the writerow()
-                x_data=[]
-                y_data=[]
-                for idx in range(self.worker.get_lines()):
-                    x_data=self.worker.get_time_buffer()
-                    y_data=self.worker.get_values_buffer(idx)
-                if len(x_data) > 0 and x_data[0] is not None:
-                    self.ui.frequencyLineEdit.setText(str(y_data[0]) + " Hz")
-                    List=[y_data[0],y_data[0]-tare,(y_data[0]-tare)/density,datetime.now()]
-                    writer_object.writerow(List)
-                    self.x_data.append(datetime.now())
-                    self.y_data.append(y_data[0])
-                   # Proceed with processing
-                else:
-                    logging.warning("x_data is empty or does not have a valid first element")
-                    
-        #Close the file object
-                f_object.close()
-
-        # plot data
         self._plt.clear()
         for idx in range(self.worker.get_lines()):
-            self._plt.plot(x=self.worker.get_time_buffer(),
-                           y=self.worker.get_values_buffer(idx),
-                           pen=Constants.plot_colors[idx])
-        self._plt_2_changeFreq.clear()
-        for idx in range(self.worker.get_lines()):
-            self._plt_2_changeFreq.plot(x=self.worker.get_time_buffer(),
-                           y=self.worker.get_values_buffer(idx)-tare,
-                           pen=Constants.plot_colors[idx])
-        self._plt6_Freq.clear()
-        for idx in range(self.worker.get_lines()):
-            self._plt6_Freq.plot(x=self.worker.get_time_buffer(),
-                           y=self.worker.get_values_buffer(idx),
-                           pen=Constants.plot_colors[idx])
-        
-        self.ui.plt_4_thickness.clear()
-        for idx in range(self.worker.get_lines()):
-            self._plt_4_thickness.plot(x=self.worker.get_time_buffer(),
-                           y=(self.worker.get_values_buffer(idx)-tare)/density,
-                           pen=Constants.plot_colors[idx])
+            self._plt.plot(
+                x=self.worker.get_time_buffer(),
+                y=self.worker.get_values_buffer(idx),
+                pen=Constants.plot_colors[idx]
+            )
 
+    def start_recording(self):
+        """Initialize recording in the database."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """INSERT INTO Process (process_name, start_time) VALUES (?, ?)""",
+                ("Recording", datetime.now())
+            )
+            self.process_id = cursor.lastrowid
 
-
-    def _source_changed(self):
+    def stop_recording(self):
         """
-        Updates the source and depending boxes on change.
-        This function is connected to the indexValueChanged signal of the Source ComboBox.
-        :return:
+        Stop recording data and save any remaining buffered data.
         """
-        logging.info("[G] Scanning source {}".format(self._get_source().name))
-        # clear boxes before adding new
-        self.ui.cBox_Port.clear()
-        self.ui.cBox_Speed.clear()
+        if not self.is_recording:
+            return
 
+        # Finalize recording process
+        self.worker.flush_to_db()  # Ensure all data in the buffer is saved to the DB
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE Process SET end_time = ? WHERE process_id = ?",
+                (datetime.now(), self.process_id)
+            )
+            conn.commit()
+            logging.info(f"Stopped recording for process ID: {self.process_id}")
+        except sqlite3.Error as e:
+            logging.error(f"Failed to stop recording: {e}")
+        finally:
+            conn.close()
+
+        # Reset recording state
+        self.is_recording = False
+        self.ui.recordButton.setIcon(QtGui.QIcon(".\\images\\play.png"))
+        self.process_id = None
+        logging.info("Recording stopped.")
+
+
+    def _initialize_db_connection(self):
+        """Test database connection."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.close()
+            logging.info("Database connection initialized.")
+        except sqlite3.Error as e:
+            logging.error(f"Error connecting to database: {e}")
+
+    def _update_sample_size(self):
+        """Update sample size in the Worker."""
+        self.worker.reset_buffers(self.ui.sBox_Samples.value())
+
+    def _update_ports_and_speeds(self):
+        """Update available ports and speeds based on source."""
         source = self._get_source()
-        ports = self.worker.get_source_ports(source)
-        speeds = self.worker.get_source_speeds(source)
-
-        if ports is not None:
-            self.ui.cBox_Port.addItems(ports)
-        if speeds is not None:
-            self.ui.cBox_Speed.addItems(speeds)
-        if self._get_source() == SourceType.serial:
-            self.ui.cBox_Speed.setCurrentIndex(len(speeds) - 1)
+        self.ui.cBox_Port.clear()
+        self.ui.cBox_Port.addItems(self.worker.get_source_ports(source) or [])
+        self.ui.cBox_Speed.clear()
+        self.ui.cBox_Speed.addItems(self.worker.get_source_speeds(source) or [])
 
     def _get_source(self):
-        """
-        Gets the current source type.
-        :return: Current Source type.
-        :rtype: SourceType.
-        """
         return SourceType(self.ui.cBox_Source.currentIndex())
-    
+
     def load_materials(self):
-        """Load materials from the database and display in the list widget."""
+        """
+        Load materials from the database and display them in the materials list widget.
+        """
         self.ui.materialsListWidget.clear()
         materials = self.material_library.get_materials()
         if not materials:
             logging.warning("No materials found in the database.")
             return
+
         for material in materials:
             item = QListWidgetItem(f"{material['name']} ({material['density']} g/cm³)")
             item.setData(QtCore.Qt.UserRole, material['id'])
             self.ui.materialsListWidget.addItem(item)
 
-
     def add_material(self):
         """Add a new material to the database."""
         name = self.ui.materialEditLineEdit.text()
         density = self.ui.densityEditLineEdit.text()
-
         if name and density:
             self.material_library.add_material(name, float(density))
             self.load_materials()
 
-
-
     def update_material(self):
-        """Update the selected material in the database."""
+        """Update the selected material."""
         selected_item = self.ui.materialsListWidget.currentItem()
-        if not selected_item:
-            logging.warning("No material selected for update.")
-            return
-
-        material_id = selected_item.data(QtCore.Qt.UserRole)
-        name = self.ui.materialEditLineEdit.text()
-        density = self.ui.densityEditLineEdit.text()
-
-        if name and density:
-            self.material_library.update_material(material_id, name, float(density))
-            self.load_materials()
-
+        if selected_item:
+            material_id = selected_item.data(QtCore.Qt.UserRole)
+            name = self.ui.materialEditLineEdit.text()
+            density = self.ui.densityEditLineEdit.text()
+            if name and density:
+                self.material_library.update_material(material_id, name, float(density))
+                self.load_materials()
 
     def delete_material(self):
-        """Delete the selected material from the database."""
+        """Delete the selected material."""
         selected_item = self.ui.materialsListWidget.currentItem()
-        if not selected_item:
-            return
-
-        material_id = selected_item.data(QtCore.Qt.UserRole)
-        self.material_library.delete_material(material_id)
-        self.load_materials()
+        if selected_item:
+            material_id = selected_item.data(QtCore.Qt.UserRole)
+            self.material_library.delete_material(material_id)
+            self.load_materials()
 
     def populate_material_form(self, item):
         """
         Populate the form fields with the selected material's data.
-        
-        :param item: The QListWidgetItem that was clicked.
         """
-        # Get the material ID stored in the item's data
         material_id = item.data(QtCore.Qt.UserRole)
-        
-        # Fetch the material details from the database
         material = self.material_library.get_material_by_id(material_id)
 
-        # Populate the form fields with the material details
         if material:
             self.ui.materialEditLineEdit.setText(material['name'])
             self.ui.densityEditLineEdit.setText(str(material['density']))
             logging.info(f"Material form populated with ID {material_id}: {material}")
         else:
-            logging.warning(f"Material with ID {material_id} not found")
+            logging.warning(f"Material with ID {material_id} not found.")
 
-    def _initialize_db_connection(self):
-        try:
-            self.conn = sqlite3.connect(self.db_path)
-            self.cursor = self.conn.cursor()
-            print("Database connection initialized.")
-        except sqlite3.Error as e:
-            print(f"Error connecting to database: {e}")
 
-    def _save_plot_data(self, x_data, y_data):
+    def closeEvent(self, event):
+        """Handle window close event."""
+        if self.worker.is_running():
+            self.stop()
+        super().closeEvent(event)
+
+    def switch_page(self, index):
         """
-        Saves plot data into the ProcessData table for the current process.
-        :param x_data: List of frequency changes (or x-axis data).
-        :param y_data: List of absolute frequencies (or y-axis data).
+        Switch to the specified page in the QStackedWidget.
+        Fetch materials if navigating to the materials page.
         """
-        if self.process_id is None:
-            logging.warning("No active process. Data will not be saved.")
-            return
-
-        if not x_data or not y_data:
-            logging.warning("No data to save in ProcessData.")
-            return
-
-        try:
-            with self.conn:
-                cursor = self.conn.cursor()
-                # Calculate rate of change
-                rate_of_change = self._calculate_rate_of_change(x_data)
-
-                for x, y in zip(x_data, y_data):
-                    cursor.execute("""
-                        INSERT INTO ProcessData (
-                            process_id, frequency, frequency_change, frequency_rate_of_change, unit
-                        ) VALUES (?, ?, ?, ?, ?)
-                    """, (self.process_id, y, x, rate_of_change, "Hz"))
+        if 0 <= index < self.ui.stackedWidget.count():
+            self.ui.stackedWidget.setCurrentIndex(index)
+            logging.info(f"Switched to page {index}: {self.ui.stackedWidget.currentWidget().objectName()}")
             
-            logging.info(f"Process data successfully saved for process_id {self.process_id}.")
-        except Exception as e:
-            logging.error(f"Error saving process data: {e}")
+            # Fetch materials if navigating to the materials page
+            if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
+                self.load_materials()
+        else:
+            logging.warning(f"Invalid page index: {index}")
 
-
-    def _calculate_rate_of_change(self, x_data):
+    def _source_changed(self):
         """
-        Calculates the rate of change as the average of the last 500 entries in x_data.
-        If there are fewer than 500 entries, it calculates the average for all entries.
-        :param x_data: List of frequency changes (x-axis data).
-        :return: Average rate of change.
+        Updates the source and dependent combo boxes when the source changes.
         """
-        if len(x_data) < 2:
-            return 0.0  # No meaningful rate of change if less than 2 points.
+        logging.info(f"Scanning source: {self._get_source().name}")
+        # Clear boxes before adding new options
+        self.ui.cBox_Port.clear()
+        self.ui.cBox_Speed.clear()
 
-        recent_values = x_data[-500:] if len(x_data) > 500 else x_data
-        rate_of_change = sum(abs(recent_values[i] - recent_values[i - 1]) for i in range(1, len(recent_values))) / len(recent_values)
-        return rate_of_change
+        # Get the current source type
+        source = self._get_source()
+        ports = self.worker.get_source_ports(source)
+        speeds = self.worker.get_source_speeds(source)
 
-    def start_recording(self):
-        # Initialize process in the database
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO Process (process_name, start_time) VALUES (?, ?)
-                """,
-                ("Recording", datetime.now()),
-            )
-            self.process_id = cursor.lastrowid
-            conn.commit()
-            logging.info(f"Recording started with process ID: {self.process_id}")
-        except sqlite3.Error as e:
-            logging.error(f"Failed to start recording: {e}")
-        finally:
-            conn.close()
+        # Populate the combo boxes with the available options
+        if ports:
+            self.ui.cBox_Port.addItems(ports)
+        if speeds:
+            self.ui.cBox_Speed.addItems(speeds)
 
+        # Default to the highest speed for serial source
+        if self._get_source() == SourceType.serial and speeds:
+            self.ui.cBox_Speed.setCurrentIndex(len(speeds) - 1)
 
-    def stop_recording(self):
-        # Finalize process and save data
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE Process SET end_time = ? WHERE process_id = ?
-                """,
-                (datetime.now(), self.process_id),
-            )
-            conn.commit()
-            logging.info(f"Recording stopped for process ID: {self.process_id}")
-        except sqlite3.Error as e:
-            logging.error(f"Failed to stop recording: {e}")
-        finally:
-            conn.close()
-        
-        self._save_plot_data(self.x_data, self.y_data)
-
-
-    def _save_plot_data(self, x_data, y_data):
-        if not self.process_id:  # Ensure process_id exists
-            logging.error("No process ID available. Cannot save data.")
-            return
-
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.cursor()
-            for x, y in zip(x_data, y_data):
-                cursor.execute(
-                    """
-                    INSERT INTO ProcessData (process_id, frequency, frequency_change, frequency_rate_of_change, unit)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (self.process_id, x, 0.0, 0.0, "Hz"),  # Adjust `frequency_change` and `frequency_rate_of_change` as needed
-                )
-            conn.commit()
-            logging.info("Plot data saved to database.")
-        except sqlite3.Error as e:
-            logging.error(f"Failed to save plot data: {e}")
-        finally:
-            conn.close()
-
-
-    def _calculate_rate_of_change(self, x_data):
+    def _get_source(self):
         """
-        Calculates the rate of change as the average of the last 500 entries.
+        Gets the current source type based on the combo box index.
+        :return: Current source type.
+        :rtype: SourceType
         """
-        if len(x_data) < 2:
-            return 0.0
-        return sum(abs(x_data[i] - x_data[i - 1]) for i in range(1, len(x_data[-500:]))) / min(len(x_data), 500)
+        return SourceType(self.ui.cBox_Source.currentIndex())
+    
+    def _toggle_ui(self, state):
+        """
+        Toggle the UI elements based on the given state.
+        :param state: State to set the UI elements to.
+        :type state: bool.
+        """
+        self.ui.pButton_Start.setEnabled(state)
+        self.ui.pButton_Stop.setEnabled(not state)
+        self.ui.cBox_Source.setEnabled(state)
+        self.ui.cBox_Port.setEnabled(state)
+        self.ui.cBox_Speed.setEnabled(state)
+        self.ui.sBox_Samples.setEnabled(state)
+        self.ui.chBox_export.setEnabled(state)
+        self.ui.recordButton.setEnabled(not state)
 
-    def _initialize_db_connection(self):
-        """
-        Initializes and returns a database connection.
-        """
-        try:
-            conn = sqlite3.connect("deploy/db/database.db")
-            logging.info("Database connection established.")
-            return conn
-        except Exception as e:
-            logging.error(f"Error connecting to the database: {e}")
-            raise
-
+    def _update_plot(self):
+        """Update the plot with data from the Worker."""
+        self.worker.consume_queue()
+        self._plt.clear()
+        for idx in range(self.worker.get_lines()):
+            self._plt.plot(
+                x=self.worker.get_time_buffer(),
+                y=self.worker.get_values_buffer(idx),
+                pen=Constants.plot_colors[idx]
+            )   
+    
 
     
 
 
-        
-            
+
+
+    
