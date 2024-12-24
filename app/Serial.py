@@ -108,13 +108,7 @@ class SerialProcess(multiprocessing.Process):
         return [str(v) for v in [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]]
 
     def _is_port_available(self, port):
-        """
-        Checks is the port is currently connected to the host.
-        :param port: Port name to be verified.
-        :return: True if the port is connected to the host.
-        :rtype: bool.
-        """
-        for p in self.get_ports():
+        for p in SerialProcess.get_ports():  # Correct call
             if p == port:
                 return True
         return False
