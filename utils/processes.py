@@ -2,8 +2,8 @@ import logging
 import multiprocessing
 import serial
 from serial.tools import list_ports
-from constants import Constants
-from architecture import Architecture, OSType
+from utils.constants import Constants
+from utils.architecture import Architecture, OSType
 import time
 from time import sleep
 import socket

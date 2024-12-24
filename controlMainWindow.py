@@ -15,7 +15,28 @@ from app.material_library import MaterialLibrary
 from datetime import datetime
 from utils.fileManager import FileManager
 import sqlite3
-import utils.logdecorator
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+def log_calls(func):
+    """Decorator that logs function calls."""
+    def wrapper(*args, **kwargs):
+        logging.info(f"Called function: {func.__name__} | args: {args} | kwargs: {kwargs}")
+        return func(*args, **kwargs)
+    return wrapper
+
+
+def log_all_methods(cls):
+    """Class decorator to log calls to all methods of a class."""
+    for attr_name, attr_value in list(cls.__dict__.items()):
+        # Check if the attribute is a callable (i.e., a method or function)
+        if callable(attr_value) and not attr_name.startswith("__"):
+            # Wrap the original method with the log_calls decorator
+            setattr(cls, attr_name, log_calls(attr_value))
+    return cls
+
+
 
 tare = 6000000
 density = 10
@@ -96,25 +117,24 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         else:
             logging.warning(f"Invalid page index: {index}")
 
-    def start(self):
+    def start(self, checked=False):
         """
-        Starts the acquisition of the selected serial port.
-        This function is connected to the clicked signal of the Start button.
-        :return:
+        Starts data acquisition.
         """
-        logging.info("TAG Clicked start")
-        self.worker = Worker(port=self.ui.cBox_Port.currentText(),
-                             speed=float(self.ui.cBox_Speed.currentText()),
-                             samples=self.ui.sBox_Samples.value(),
-                             source=self._get_source(),
-                             export_enabled=self.ui.chBox_export.isChecked())
+        logging.info("Starting acquisition...")
+        self.worker = Worker(
+            port=self.ui.cBox_Port.currentText(),
+            speed=float(self.ui.cBox_Speed.currentText()),
+            samples=self.ui.sBox_Samples.value(),
+            source=self._get_source(),
+            export_enabled=self.ui.chBox_export.isChecked(),
+        )
+        self.worker.reset_buffers(self.ui.sBox_Samples.value())
         if self.worker.start():
-            self._timer_plot.start(Constants.plot_update_ms)
+            self.plot_timer.start(Constants.plot_update_ms)
             self._enable_ui(False)
         else:
-            logging.info("TAG Port is not available")
-            PopUp.warning(self, Constants.app_title, "Selected port \"{}\" is not available"
-                          .format(self.ui.cBox_Port.currentText()))
+            PopUp.warning(self, Constants.app_title, "Port not available.")
 
     def stop(self):
         """
@@ -323,27 +343,25 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
 
 
-    def _source_changed(self):
+    def _source_changed(self, index=None):
         """
-        Updates the source and depending boxes on change.
-        This function is connected to the indexValueChanged signal of the Source ComboBox.
-        :return:
+        Updates the source and dependent combo boxes on change.
         """
-        logging.info("[G] Scanning source {}".format(self._get_source().name))
-        # clear boxes before adding new
+        source = self._get_source()  # Fetch the source type based on current index
+        logging.info(f"Scanning source {source.name}")
+        # Clear and repopulate combo boxes
         self.ui.cBox_Port.clear()
         self.ui.cBox_Speed.clear()
-
-        source = self._get_source()
-        ports = self.worker.get_source_ports(source)
-        speeds = self.worker.get_source_speeds(source)
-
-        if ports is not None:
+        ports = Worker.get_source_ports(source)
+        speeds = Worker.get_source_speeds(source)
+        if ports:
             self.ui.cBox_Port.addItems(ports)
-        if speeds is not None:
+        if speeds:
             self.ui.cBox_Speed.addItems(speeds)
-        if self._get_source() == SourceType.serial:
+        if source == SourceType.serial and speeds:
             self.ui.cBox_Speed.setCurrentIndex(len(speeds) - 1)
+
+
 
     def _get_source(self):
         """
