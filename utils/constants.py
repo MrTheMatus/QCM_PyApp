@@ -20,6 +20,8 @@ class Constants:
     app_export_path = "data"
     app_sources = ["Serial", "Simulator", "Socket Client"]
     app_encoding = "utf-8"
+    plot_max_lines = 5  # Adjust this number based on your application's requirements
+
 
 
     '''

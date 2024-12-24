@@ -53,14 +53,18 @@ class ParserProcess(multiprocessing.Process):
 
     def _consume_queue(self):
         """
-        Consumes the internal queue and processes incoming data.
+        Consumer method for the queues/process.
+        Used in run method to recall after a stop is requested, to ensure queue is emptied.
+        :return:
         """
         while not self._in_queue.empty():
             try:
                 queue_item = self._in_queue.get(timeout=self._consumer_timeout)
-                self._parse_data(queue_item[0], queue_item[1])
+                if queue_item:
+                    self._parse_csv(queue_item[0], queue_item[1])
             except Exception as e:
-                logging.error(f"{TAG}: Error consuming queue: {e}")
+                logging.warning(f"Failed to consume queue: {e}")
+
 
     def _parse_data(self, timestamp, line):
         """

@@ -7,6 +7,8 @@ from app.Simulator import SimulatorProcess
 import logging
 import threading
 import sqlite3
+from utils.ringBuffer import RingBuffer
+
 
 TAG = "Worker"
 
@@ -31,24 +33,38 @@ class Worker:
         self._path = export_path
 
     def start(self):
-        """Starts data acquisition processes."""
+        """
+        Starts all processes, based on configuration given in constructor.
+        :return:
+        """
         self.reset_buffers(self._samples)
-        self._parser_process = ParserProcess(self._queue)
+        
+        # Initialize the parser process without starting it
+        if self._export:
+            self._parser_process = ParserProcess(self._queue, store_reference=self._csv_process)
+        else:
+            self._parser_process = ParserProcess(self._queue)
 
+        # Initialize acquisition process based on source
         if self._source == SourceType.serial:
             self._acquisition_process = SerialProcess(self._parser_process)
         elif self._source == SourceType.simulator:
             self._acquisition_process = SimulatorProcess(self._parser_process)
         elif self._source == SourceType.SocketClient:
             self._acquisition_process = SocketProcess(self._parser_process)
-
-        if self._acquisition_process.open(port=self._port, speed=self._speed):
-            self._parser_process.start()
-            self._acquisition_process.start()
-            return True
-        else:
-            logging.info("Port is not available")
+        
+        # Start the acquisition process
+        try:
+            if self._acquisition_process.open(port=self._port, speed=self._speed):
+                self._acquisition_process.start()
+                self._parser_process.start()
+                if self._export:
+                    self._csv_process.start()
+                return True
+        except Exception as e:
+            logging.error(f"Failed to start processes: {e}")
             return False
+
 
     def stop(self):
         """Stops all running processes."""
@@ -74,9 +90,17 @@ class Worker:
             self._data_buffers[idx].append(values[idx])
 
     def reset_buffers(self, samples):
-        """Resets internal data buffers."""
+        """
+        Setup/clear the internal buffers.
+        :param samples: Number of samples for the buffers.
+        :type samples: int
+        """
         self._data_buffers = [RingBuffer(samples) for _ in range(Constants.plot_max_lines)]
         self._time_buffer = RingBuffer(samples)
+        while not self._queue.empty():
+            self._queue.get()
+        logging.info("Buffers cleared.")
+
 
     def get_time_buffer(self):
         return self._time_buffer.get_all()
@@ -85,7 +109,13 @@ class Worker:
         return self._data_buffers[idx].get_all()
 
     def get_lines(self):
-        return len(self._data_buffers)
+        """
+        Gets the current number of lines in the buffers.
+        """
+        if self._data_buffers is None:
+            return 0  # No lines to process
+        return len(self._data_buffers or [])
+
 
     def is_buffer_full(self, threshold):
         """Check if the time buffer is full."""
@@ -165,3 +195,11 @@ class Worker:
         Calculate the moving average using the specified buffer.
         """
         return self._data_buffers[buffer_idx].moving_average(window_size)
+    
+    def is_running(self):
+        """
+        Checks if the acquisition process is running.
+        :return: True if the acquisition process is alive.
+        """
+        return self._acquisition_process is not None and self._acquisition_process.is_alive()
+

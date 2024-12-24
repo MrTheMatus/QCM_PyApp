@@ -13,6 +13,9 @@ from utils.fileManager import FileManager
 from app.material_library import MaterialLibrary
 from utils.popUp import PopUp
 
+tare = 6000000
+density = 10
+
 class ControlMainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, port=None, bd=115200, samples=500):
         super().__init__()
@@ -42,12 +45,6 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.sBox_Samples.setValue(samples)
         self.ui.recordButton.setIcon(QtGui.QIcon(".\\images\\play.png"))
         self._update_ports_and_speeds()
-
-    def _configure_plot(self):
-        """Set up plots with customized axes."""
-        self._yaxis = self._create_axis("Frequency", "Hz")
-        self._plt = self.ui.plt.addPlot(axisItems={'left': self._yaxis})
-        self._plt.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
 
     def _create_axis(self, label, unit):
         axis = AxisItem('left', maxTickLength=-5, showValues=True, text=label, units=unit)
@@ -88,19 +85,22 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
 
     def start(self):
-        """Start data acquisition."""
-        self.worker = Worker(
-            port=self.ui.cBox_Port.currentText(),
-            speed=float(self.ui.cBox_Speed.currentText()),
-            samples=self.ui.sBox_Samples.value(),
-            source=self._get_source(),
-            export_enabled=self.ui.chBox_export.isChecked()
-        )
+        """
+        Starts the acquisition of the selected serial port.
+        """
+        logging.info("Starting acquisition...")
+        self.worker = Worker(port=self.ui.cBox_Port.currentText(),
+                            speed=float(self.ui.cBox_Speed.currentText()),
+                            samples=self.ui.sBox_Samples.value(),
+                            source=self._get_source(),
+                            export_enabled=self.ui.chBox_export.isChecked())
+        self.worker.reset_buffers(self.ui.sBox_Samples.value())  # Initialize buffers
+
         if self.worker.start():
-            self.plot_timer.start(Constants.plot_update_ms)
-            self._toggle_ui(False)
+            self._timer_plot.start(Constants.plot_update_ms)
+            self._enable_ui(False)
         else:
-            PopUp.warning(self, Constants.app_title, f"Port {self.ui.cBox_Port.currentText()} is not available")
+            PopUp.warning(self, Constants.app_title, "Port not available.")
 
     def stop(self):
         """Stop data acquisition."""
@@ -119,54 +119,129 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             self.stop_recording()
 
     def _update_plot(self):
-        """Update plot with data from Worker."""
+        """
+        Updates and redraws the graphics in the plot using data from the Worker.
+        This function is connected to the timeout signal of a QTimer.
+        """
         self.worker.consume_queue()
-        self._plt.clear()
-        for idx in range(self.worker.get_lines()):
-            self._plt.plot(
-                x=self.worker.get_time_buffer(),
-                y=self.worker.get_values_buffer(idx),
-                pen=Constants.plot_colors[idx]
-            )
 
-    def start_recording(self):
-        """Initialize recording in the database."""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO Process (process_name, start_time) VALUES (?, ?)""",
-                ("Recording", datetime.now())
-            )
-            self.process_id = cursor.lastrowid
-
-    def stop_recording(self):
-        """
-        Stop recording data and save any remaining buffered data.
-        """
-        if not self.is_recording:
+        if self.worker.get_lines() == 0:
+            logging.warning("No data available to plot.")
             return
 
-        # Finalize recording process
-        self.worker.flush_to_db()  # Ensure all data in the buffer is saved to the DB
-        conn = sqlite3.connect(self.db_path)
+        # Validate and process data
+        time_data = self.worker.get_time_buffer()
+        if not time_data or time_data.size == 0:
+            logging.warning("Time buffer is empty. Skipping plot update.")
+            return
+        
+        
+
+        # Update plots
+        self._plt.clear()
+        self._plt_2_changeFreq.clear()
+        self._plt6_Freq.clear()
+        self.ui.plt_4_thickness.clear()
+
+        for idx in range(self.worker.get_lines()):
+            signal_data = self.worker.get_values_buffer(idx)
+            if not signal_data:
+                logging.warning(f"Signal buffer {idx} is empty. Skipping plot update for this line.")
+                continue
+
+            # Plot raw frequency data
+            self._plt.plot(x=time_data, y=signal_data, pen=Constants.plot_colors[idx])
+
+            # Plot frequency change (subtract tare)
+            frequency_change = [val - tare for val in signal_data]
+            self._plt_2_changeFreq.plot(x=time_data, y=frequency_change, pen=Constants.plot_colors[idx])
+
+            # Plot thickness (using density)
+            thickness = [(val - tare) / density for val in signal_data]
+            self.ui.plt_4_thickness.plot(x=time_data, y=thickness, pen=Constants.plot_colors[idx])
+
+            # Optional: Redraw another plot (e.g., duplicate frequency for reference)
+            self._plt6_Freq.plot(x=time_data, y=signal_data, pen=Constants.plot_colors[idx])
+
+        # Update UI with the latest frequency (assumes idx 0 is the primary frequency)
+        if len(signal_data) > 0:
+            self.ui.frequencyLineEdit.setText(f"{signal_data[0]:.2f} Hz")
+
+        # Log if necessary for debugging
+        logging.debug(f"Updated plots with {len(time_data)} timestamps and {len(signal_data)} data points per line.")
+
+
+    def _configure_plot(self):
+        """
+        Configures specific elements of the PyQtGraph plots.
+        :return:
+        """
+        self._yaxis = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='Frequency', units='Hz')
+        self._yaxis.setFixedWidth(77)
+        self._yaxis.setWidth(77)
+
+        self._yaxis2 = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='thickness', units='nm')
+        self._yaxis2.setFixedWidth(77)
+        self._yaxis2.setWidth(77)
+
+        self._yaxis3 = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='Frequency', units='Hz')
+        self._yaxis3.setFixedWidth(77)
+        self._yaxis3.setWidth(77)
+
+        self._yaxis4 = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='Frequency', units='Hz')
+        self._yaxis4.setFixedWidth(77)
+        self._yaxis4.setWidth(77)
+
+        self._yaxis.setLabel(show=True)
+        self._yaxis.setGrid(grid=True)
+        #self.ui.plt.setBackground(background=None)
+        self.ui.plt.setAntialiasing(True)
+        self._plt = self.ui.plt.addPlot(row=0, col=0, axisItems={'left':self._yaxis})
+        self._plt.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
+
+        self.ui.plt_4_thickness.setAntialiasing(True)
+        self._plt_4_thickness = self.ui.plt_4_thickness.addPlot(row=0, col=0, axisItems={'left':self._yaxis2})
+        self._plt_4_thickness.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
+
+
+        self.ui.plt6_Freq.setAntialiasing(True)
+        self._plt6_Freq = self.ui.plt6_Freq.addPlot(row=0, col=0, axisItems={'left':self._yaxis3})
+        self._plt6_Freq.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
+
+        self.ui.plt_2_changeFreq.setAntialiasing(True)
+        self._plt_2_changeFreq = self.ui.plt_2_changeFreq.addPlot(row=0, col=0, axisItems={'left':self._yaxis4})
+        self._plt_2_changeFreq.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
+
+    def start_recording(self):
         try:
+            conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE Process SET end_time = ? WHERE process_id = ?",
-                (datetime.now(), self.process_id)
-            )
+            cursor.execute("""
+                INSERT INTO Process (process_name, start_time)
+                VALUES (?, ?)
+            """, ("Recording", datetime.now()))
+            self.process_id = cursor.lastrowid
             conn.commit()
-            logging.info(f"Stopped recording for process ID: {self.process_id}")
-        except sqlite3.Error as e:
-            logging.error(f"Failed to stop recording: {e}")
+            logging.info(f"Recording started. Process ID: {self.process_id}")
+        except Exception as e:
+            logging.error(f"Error starting recording: {e}")
         finally:
             conn.close()
 
-        # Reset recording state
-        self.is_recording = False
-        self.ui.recordButton.setIcon(QtGui.QIcon(".\\images\\play.png"))
-        self.process_id = None
-        logging.info("Recording stopped.")
+    def stop_recording(self):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE Process SET end_time = ? WHERE process_id = ?
+            """, (datetime.now(), self.process_id))
+            conn.commit()
+            logging.info(f"Recording stopped. Process ID: {self.process_id}")
+        except Exception as e:
+            logging.error(f"Error stopping recording: {e}")
+        finally:
+            conn.close()
+
 
 
     def _initialize_db_connection(self):
@@ -318,16 +393,35 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.chBox_export.setEnabled(state)
         self.ui.recordButton.setEnabled(not state)
 
-    def _update_plot(self):
-        """Update the plot with data from the Worker."""
-        self.worker.consume_queue()
-        self._plt.clear()
-        for idx in range(self.worker.get_lines()):
-            self._plt.plot(
-                x=self.worker.get_time_buffer(),
-                y=self.worker.get_values_buffer(idx),
-                pen=Constants.plot_colors[idx]
-            )   
+    def _store_signal_values(self, values):
+        logging.debug(f"Appending values: {values}")
+        for idx in range(self._lines):
+            self._data_buffers[idx].append(values[idx])
+
+    def _configure_timers(self):
+        """Configure timers for batch saving and plot updates."""
+        self.plot_timer = QTimer(self)
+        self.plot_timer.timeout.connect(self._update_plot)
+
+    def _enable_ui(self, enabled):
+        """
+        Enables or disables the UI elements of the window.
+        :param enabled: The value to be set at the enabled characteristic of the UI elements.
+        :type enabled: bool
+        :return:
+        """
+        self.ui.cBox_Port.setEnabled(enabled)
+        self.ui.cBox_Speed.setEnabled(enabled)
+        self.ui.pButton_Start.setEnabled(enabled)
+        self.ui.chBox_export.setEnabled(enabled)
+        self.ui.cBox_Source.setEnabled(enabled)
+        self.ui.pButton_Stop.setEnabled(not enabled)
+
+
+
+        
+    
+
     
 
     
