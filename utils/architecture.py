@@ -4,6 +4,9 @@ import sys
 import platform
 import logging
 import argparse
+from utils.logdecorator import log_calls, log_all_methods
+
+@log_all_methods
 class Architecture:
     """
     Wrappers for architecture specific methods.

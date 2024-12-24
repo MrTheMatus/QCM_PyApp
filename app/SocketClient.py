@@ -5,11 +5,12 @@ import socket
 
 from utils.constants import Constants
 import logging
+from utils.logdecorator import log_calls, log_all_methods
 
 
 TAG = "Socket"
 
-
+@log_all_methods
 class SocketProcess(multiprocessing.Process):
     """
     Socket client

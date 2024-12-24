@@ -3,11 +3,11 @@ from time import sleep
 
 from utils.constants import Constants
 import logging
-
+from logdecorator import log_calls, log_all_methods
 
 TAG = "Parser"
 
-
+@log_all_methods
 class ParserProcess(multiprocessing.Process):
     """
     Process to parse incoming data, parse it, and then distribute it to graph and storage.

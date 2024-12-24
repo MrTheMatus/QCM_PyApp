@@ -8,11 +8,12 @@ from utils.architecture import Architecture
 from utils.architecture import OSType
 from utils.constants import Constants
 import logging
+from utils.logdecorator import log_calls, log_all_methods
 
 
 TAG = "Serial"
 
-
+@log_all_methods
 class SerialProcess(multiprocessing.Process):
     """
     Wrapper for serial package into a multiprocessing instance.

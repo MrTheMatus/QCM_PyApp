@@ -4,10 +4,13 @@ from time import sleep
 from datetime import datetime
 from utils.constants import Constants  # Adjust path as needed
 import logging  # Adjust path as needed
+from utils.logdecorator import log_calls, log_all_methods
 
 TAG = "DB"
 BATCH_SIZE = 60  # Number of records to batch before committing
 
+
+@log_all_methods
 class DatabaseProcess(multiprocessing.Process):
     """
     Process to store and export data to an SQLite database.

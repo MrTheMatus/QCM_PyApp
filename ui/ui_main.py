@@ -9,8 +9,9 @@
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from utils.logdecorator import log_calls, log_all_methods
 
-
+@log_all_methods
 class Ui_AffordableQCM(object):
     def setupUi(self, AffordableQCM):
         AffordableQCM.setObjectName("AffordableQCM")

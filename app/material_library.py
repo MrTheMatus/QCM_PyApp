@@ -3,7 +3,10 @@ from app.data_handler import DataHandler
 from app.database_process import DatabaseProcess
 import sqlite3
 import logging
+from utils.logdecorator import log_calls, log_all_methods
 
+
+@log_all_methods
 class MaterialLibrary:
     def __init__(self, db_path="deploy/db/database.db"):
         self.conn = sqlite3.connect(db_path)

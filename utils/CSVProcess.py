@@ -4,9 +4,10 @@ import logging
 from utils.fileManager import FileManager
 from time import gmtime, sleep, strftime
 import csv
+from logdecorator import log_calls, log_all_methods
 TAG = "CSV"
 
-
+@log_all_methods
 class CSVProcess(multiprocessing.Process):
     """
     Process to store and export data to a file.

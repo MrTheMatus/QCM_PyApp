@@ -15,11 +15,13 @@ from app.material_library import MaterialLibrary
 from datetime import datetime
 from utils.fileManager import FileManager
 import sqlite3
+import utils.logdecorator
 
 tare = 6000000
 density = 10
 #todo expand
 
+@log_all_methods
 class ControlMainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, port=None, bd=115200, samples=500):
         super().__init__()

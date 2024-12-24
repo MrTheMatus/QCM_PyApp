@@ -1,6 +1,8 @@
 import os
+from logdecorator import log_calls, log_all_methods
 
 
+@log_all_methods
 class FileManager:
     """
     Wrappers for file operations.

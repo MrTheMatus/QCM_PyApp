@@ -1,11 +1,13 @@
 import argparse
 import logging
 from utils.constants import *
+from utils.logdecorator import log_calls, log_all_methods
+
 
 
 TAG = "Arguments"
 
-
+@log_all_methods
 class Arguments:
     """
     Wrapper for argparse package.

@@ -8,11 +8,12 @@ from app.Serial import SerialProcess
 from app.SocketClient import SocketProcess
 from app.Simulator import SimulatorProcess
 import logging
+from utils.logdecorator import log_calls, log_all_methods
 
 
 TAG = "Worker"
 
-
+@log_all_methods
 class Worker:
     """
     Concentrates all workers (processes) to run the application.

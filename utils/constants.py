@@ -1,7 +1,9 @@
 from enum import Enum
 from pyqtgraph import AxisItem
+from logdecorator import log_calls, log_all_methods
 
 
+@log_all_methods
 class SourceType(Enum):
     """
     Enum for the types of sources. Indices MUST match app_sources constant.
@@ -10,7 +12,7 @@ class SourceType(Enum):
     serial = 0
     SocketClient = 2
 
-
+@log_all_methods
 class Constants:
     """
     Common constants for the application.
@@ -58,23 +60,3 @@ class Constants:
     log_max_bytes = 5120
     log_default_level = 1
     log_default_console_log = False
-
-
-class MinimalPython:
-    """
-    Specifies the minimal Python version required.
-    """
-    major = 3
-    minor = 2
-    release = 0
-
-##########################################
-#  Provides a non scientific axis notation
-##########################################  
-# TODO
-class NonScientificAxis(AxisItem):
-    def __init__(self, *args, **kwargs):
-        super(NonScientificAxis, self).__init__(*args, **kwargs)
-
-    def tickStrings(self, values, scale, spacing):
-        return [int(value*1) for value in values] 

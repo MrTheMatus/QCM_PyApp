@@ -5,11 +5,11 @@ import numpy as np
 
 from utils.constants import Constants
 import logging
-
+from utils.logdecorator import log_calls, log_all_methods
 
 TAG = "Simulator"
 
-
+@log_all_methods
 class SimulatorProcess(multiprocessing.Process):
     """
     Simulates signals and converts them as raw data to feed the processes.

@@ -1,6 +1,9 @@
 # data_handler.py
 import sqlite3
+from utils.logdecorator import log_calls, log_all_methods
 
+
+@log_all_methods
 class DataHandler:
     def __init__(self, db_name="app_data.db"):
         self.conn = sqlite3.connect(db_name)

@@ -1,6 +1,7 @@
 from PyQt5 import QtGui
+from logdecorator import log_calls, log_all_methods
 
-
+@log_all_methods
 class PopUp:
     @staticmethod
     def question_yes_no(parent, title, message):
