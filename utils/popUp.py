@@ -1,5 +1,5 @@
 from PyQt5 import QtGui
-from logdecorator import log_calls, log_all_methods
+from utils.logdecorator import log_calls, log_all_methods
 
 @log_all_methods
 class PopUp:

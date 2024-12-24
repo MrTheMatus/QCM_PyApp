@@ -1,5 +1,5 @@
 import numpy as np
-from logdecorator import log_calls, log_all_methods
+from utils.logdecorator import log_calls, log_all_methods
 
 """
 http://code.activestate.com/recipes/68429-ring-buffer/

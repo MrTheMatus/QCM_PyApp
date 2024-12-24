@@ -4,7 +4,7 @@ import logging
 from utils.fileManager import FileManager
 from time import gmtime, sleep, strftime
 import csv
-from logdecorator import log_calls, log_all_methods
+from utils.logdecorator import log_calls, log_all_methods
 TAG = "CSV"
 
 @log_all_methods
