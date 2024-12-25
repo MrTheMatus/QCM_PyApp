@@ -2,6 +2,7 @@ import sys
 from PyQt5 import QtWidgets
 from controlMainWindow import ControlMainWindow
 import logging
+import atexit
 
 logging.basicConfig(
     filename="log.txt",
@@ -21,6 +22,10 @@ def sample_method():
 
 sample_method()
 
+def cleanup_logging():
+    logging.shutdown()
+
+atexit.register(cleanup_logging)
 
 # Example: Redirecting sys.settrace logs
 def trace_calls(frame, event, arg):

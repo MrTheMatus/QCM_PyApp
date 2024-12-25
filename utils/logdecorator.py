@@ -11,10 +11,7 @@ def log_calls(func):
 
 
 def log_all_methods(cls):
-    """Class decorator to log calls to all methods of a class."""
     for attr_name, attr_value in list(cls.__dict__.items()):
-        # Check if the attribute is a callable (i.e., a method or function)
-        if callable(attr_value) and not attr_name.startswith("__"):
-            # Wrap the original method with the log_calls decorator
+        if callable(attr_value) and not attr_name.startswith("__") and attr_name != "__repr__":
             setattr(cls, attr_name, log_calls(attr_value))
     return cls

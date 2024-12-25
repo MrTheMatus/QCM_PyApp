@@ -18,13 +18,8 @@ class Worker:
     """
     Concentrates all workers (processes) to run the application.
     """
-    def __init__(self,
-                 port=None,
-                 speed=Constants.serial_default_speed,
-                 samples=Constants.argument_default_samples,
-                 source=SourceType.serial,
-                 export_enabled=False,
-                 export_path=Constants.app_export_path):
+    def __init__(self, port=None, speed=Constants.serial_default_speed, samples=Constants.argument_default_samples,
+                 source=SourceType.serial, export_enabled=False, export_path=Constants.app_export_path, db_path="deploy/db/database.db"):
         """
         Creates and orchestrates all processes involved in data acquisition, processing and storing.
         :param port: Port to open on start.
@@ -48,6 +43,7 @@ class Worker:
         self._acquisition_process = None
         self._parser_process = None
         self._csv_process = None
+        self._db_process = None  # Database process
 
         self._port = port
         self._speed = float(speed)
@@ -55,6 +51,7 @@ class Worker:
         self._source = source
         self._export = export_enabled
         self._path = export_path
+        self._db_path = db_path  # Database path
 
     def start(self):
         """
@@ -62,8 +59,10 @@ class Worker:
         :return:
         """
         self.reset_buffers(self._samples)
+
         if self._export:
             self._csv_process = CSVProcess(path=self._path)
+            self._db_process = DatabaseProcess(db_path=self._db_path)
             self._parser_process = ParserProcess(self._queue, store_reference=self._csv_process)
         else:
             self._parser_process = ParserProcess(self._queue)
@@ -74,25 +73,16 @@ class Worker:
             self._acquisition_process = SimulatorProcess(self._parser_process)
         elif self._source == SourceType.SocketClient:
             self._acquisition_process = SocketProcess(self._parser_process)
+
         if self._acquisition_process.open(port=self._port, speed=self._speed):
-            
-            # self._parser_process.start()
-            '''
-            TypeError: can't pickle weakref objects when running demo in Simulator mode #7
-            https://github.com/ssepulveda/RTGraph/issues/7 
-            issue for python 3.7 
-            this error occurred because self._parser_process.start() is called before self._acquisition_process.start()
-            
-            '''
             if self._export:
                 self._csv_process.start()
-            # call first acquisition 
-            self._acquisition_process.start() 
-            # call after parser 
+                self._db_process.start()
+            self._acquisition_process.start()
             self._parser_process.start()
             return True
         else:
-            logging.info(  "Port is not available")
+            logging.info("Port is not available")
             return False
 
     def stop(self):
@@ -101,8 +91,8 @@ class Worker:
         :return:
         """
         self.consume_queue()
-        for process in [self._acquisition_process, self._parser_process, self._csv_process]:
-            if process is not None and process.is_alive():
+        for process in [self._acquisition_process, self._parser_process, self._csv_process, self._db_process]:
+            if process and process.is_alive():
                 process.stop()
                 process.join(Constants.process_join_timeout_ms)
 
@@ -117,33 +107,32 @@ class Worker:
     def _store_data(self, data):
         """
         Adds data to internal time and data buffers.
-        :param data: values to add to internal buffers.
-        :type data: list.
-        :return:
         """
-        # Add timestamp
+        if not data or len(data) < 2 or not data[1]:
+            logging.warning(f"Invalid data received: {data}")
+            return
+
         self._time_buffer.append(data[0])
-        # Add values
         self._store_signal_values(data[1])
 
+
+
+        # Send data to the database process if enabled
+        if self._db_process:
+            frequency = data[1][0]
+            frequency_change = frequency - Constants.frequency_tare
+            thickness = (frequency_change / Constants.material_density)  # Example calculation
+            self._db_process.add_data(frequency, frequency_change, thickness)
+
     def _store_signal_values(self, values):
-        """
-        Stores the signal values in internal buffers.
-        :param values: Values to store.
-        :type values: float list.
-        :return:
-        """
-        # detect how many lines are present to plot
         size = len(values)
         if self._lines < size:
-            if size > Constants.plot_max_lines:
-                self._lines = Constants.plot_max_lines
-            else:
-                self._lines = size
+            self._lines = min(size, Constants.plot_max_lines)
 
-        # store the data in respective buffers
         for idx in range(self._lines):
-            self._data_buffers[idx].append(values[idx])
+            if idx < len(values):  # Ensure no index out of range
+                self._data_buffers[idx].append(values[idx])
+
 
     def get_time_buffer(self):
         """
@@ -223,9 +212,7 @@ class Worker:
         :type samples: int.
         :return:
         """
-        self._data_buffers = []
-        for tmp in Constants.plot_colors:
-            self._data_buffers.append(RingBuffer(samples))
+        self._data_buffers = [RingBuffer(samples) for _ in Constants.plot_colors]
         self._time_buffer = RingBuffer(samples)
         while not self._queue.empty():
             self._queue.get()

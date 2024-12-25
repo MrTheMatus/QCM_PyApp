@@ -1,32 +1,13 @@
 import multiprocessing
 from time import sleep
-
-from utils.constants import Constants
 import logging
-from utils.logdecorator import log_calls, log_all_methods
+from utils.constants import Constants
 
-TAG = "Parser"
-
-@log_all_methods
 class ParserProcess(multiprocessing.Process):
-    """
-    Process to parse incoming data, parse it, and then distribute it to graph and storage.
-    """
     def __init__(self, data_queue, store_reference=None,
                  split=Constants.csv_delimiter,
                  consumer_timeout=Constants.parser_timeout_ms):
-        """
-
-        :param data_queue: Reference to Queue where processed data will be put.
-        :type data_queue: multiprocessing Queue.
-        :param store_reference: Reference to CSVProcess instance, if needed.
-        :type store_reference: CSVProcess (multiprocessing.Process)
-        :param split: Delimiter in incoming data.
-        :type split: str.
-        :param consumer_timeout: Time to wait after emptying the internal buffer before next parsing.
-        :type consumer_timeout: float.
-        """
-        multiprocessing.Process.__init__(self)
+        super().__init__()
         self._exit = multiprocessing.Event()
         self._in_queue = multiprocessing.Queue()
         self._out_queue = data_queue
@@ -35,71 +16,72 @@ class ParserProcess(multiprocessing.Process):
         self._store_reference = store_reference
         logging.debug("Process ready")
 
-    def add(self, txt):
-        """
-        Adds new raw data to internal buffer.
-        :param txt: Raw data comming from acquisition process.
-        :type txt: basestring.
-        :return:
-        """
-        self._in_queue.put(txt)
+    def add(self, time, line):
+        if not line or (isinstance(line, bytes) and line.strip() == b""):
+            logging.warning(f"Empty or invalid line received: {line}")
+            return
+        self._in_queue.put((time, line))
+
 
     def run(self):
-        """
-        Process will monitor the internal buffer to parse raw data and distribute to graph and storage, if needed.
-        The process will loop again after timeout if more data is available.
-        :return:
-        """
-        logging.debug(f"{TAG}:, Process starting...")
+        """Main loop to consume and parse data."""
+        logging.info("Parser process starting...")
         while not self._exit.is_set():
             self._consume_queue()
             sleep(self._consumer_timeout)
-        # last check on the queue to completely remove data.
-        self._consume_queue()
-        logging.debug("Process finished")
+        logging.info("Parser process exiting...")
 
     def stop(self):
-        """
-        Signals the process to stop parsing data.
-        :return:
-        """
-        logging.debug("Process finishing...")
+        """Signal the process to stop."""
+        logging.info("Stopping parser process...")
         self._exit.set()
 
     def _consume_queue(self):
         """
         Consumer method for the queues/process.
         Used in run method to recall after a stop is requested, to ensure queue is emptied.
-        :return:
         """
         while not self._in_queue.empty():
-            queue = self._in_queue.get(timeout=self._consumer_timeout)
-            self._parse_csv(queue[0], queue[1])
+            try:
+                # Fetch data from the queue
+                time, line = self._in_queue.get(timeout=self._consumer_timeout)
+                # Ensure proper arguments are passed to _parse_csv
+                self._parse_csv(time, line)
+            except ValueError as ve:
+                logging.warning(f"ValueError while consuming queue: {ve}")
+            except Exception as e:
+                logging.error(f"Error consuming queue item: {e}")
+
+
 
     def _parse_csv(self, time, line):
         """
         Parses incoming data and distributes to external processes.
         :param time: Timestamp.
         :type time: float.
-        :param line: Raw data coming from acquisition process.
-        :type line: basestring.
-        :return:
+        :param line: Raw data coming from the acquisition process.
+        :type line: str or bytes.
         """
-        if len(line) > 0:
-            try:
-                if type(line) == bytes:
-                    values = line.decode("UTF-8").split(self._split)
-                elif type(line) == str:
-                    values = line.split(self._split)
-                else:
-                    raise TypeError
-                values = [float(v) for v in values]
-                logging.debug(f"{TAG}: {values}")
-                self._out_queue.put((time, values))
-                if self._store_reference is not None:
-                    self._store_reference.add(time, values)
-            except ValueError:
-                logging.warning("Can't convert to float. Raw: {}".format(line.strip()))
-            except AttributeError:
-                logging.warning("Attribute error on type ({}). Raw: {}".format(type(line), line.strip()))
+        if not line or len(line) == 0:
+            logging.warning(f"Empty or invalid line received: {line}")
+            return
+
+        try:
+            if isinstance(line, bytes):
+                values = line.decode("UTF-8").strip().split(self._split)
+            elif isinstance(line, str):
+                values = line.strip().split(self._split)
+            else:
+                raise TypeError("Unsupported line type")
+
+            # Convert values to float
+            values = [float(v) for v in values if v]
+            logging.debug(f"Parsed values: {values}")
+
+            # Push data to the output queue
+            self._out_queue.put((time, values))
+            if self._store_reference:
+                self._store_reference.add(time, values)
+        except Exception as e:
+            logging.error(f"Error parsing line: {line}. Exception: {e}")
 

@@ -1,12 +1,10 @@
 import numpy as np
-from utils.logdecorator import log_calls, log_all_methods
 
 """
 http://code.activestate.com/recipes/68429-ring-buffer/
 http://stackoverflow.com/questions/4151320/efficient-circular-buffer
 """
 
-@log_all_methods
 class RingBuffer(object):
     def __init__(self, size_max, default_value=0.0, dtype=float):
         """

@@ -42,6 +42,8 @@ class Constants:
     serial_default_speed = 115200
     serial_timeout_ms = 0.5
 
+    density_factor = 1.0
+
     class SocketClient:
         timeout = 0.01
         host_default = "localhost"

@@ -65,7 +65,7 @@ class SerialProcess(multiprocessing.Process):
                 logging.info(  "Port opened")
                 timestamp = time()
                 while not self._exit.is_set():
-                    self._parser.add([time() - timestamp, self._serial.readline()])
+                    self._parser.add(time() - timestamp, self._serial.readline())
                 logging.info(  "Process finished")
                 self._serial.close()
             else:
