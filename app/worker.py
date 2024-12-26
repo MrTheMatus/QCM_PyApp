@@ -9,6 +9,7 @@ from app.SocketClient import SocketProcess
 from app.Simulator import SimulatorProcess
 import logging
 from utils.logdecorator import log_calls, log_all_methods
+import numpy as np
 
 
 TAG = "Worker"
@@ -105,34 +106,35 @@ class Worker:
             self._store_data(self._queue.get(False))
 
     def _store_data(self, data):
-        """
-        Adds data to internal time and data buffers.
-        """
-        if not data or len(data) < 2 or not data[1]:
-            logging.warning(f"Invalid data received: {data}")
+        """Store data in buffers."""
+        if not data or len(data) < 2:
+            logging.warning(f"Invalid data format: {data}")
             return
-
-        self._time_buffer.append(data[0])
-        self._store_signal_values(data[1])
-
-
-
-        # Send data to the database process if enabled
-        if self._db_process:
-            frequency = data[1][0]
-            frequency_change = frequency - Constants.frequency_tare
-            thickness = (frequency_change / Constants.material_density)  # Example calculation
-            self._db_process.add_data(frequency, frequency_change, thickness)
+            
+        timestamp, values = data
+        
+        if not values:
+            logging.warning("No values to store")
+            return
+            
+        # Store timestamp
+        self._time_buffer.append(timestamp)
+        
+        # Store values
+        self._store_signal_values(values)
+        
+        # Log for debugging
+        logging.debug(f"Stored values: {values}")
 
     def _store_signal_values(self, values):
-        size = len(values)
-        if self._lines < size:
-            self._lines = min(size, Constants.plot_max_lines)
-
-        for idx in range(self._lines):
-            if idx < len(values):  # Ensure no index out of range
-                self._data_buffers[idx].append(values[idx])
-
+        """Store signal values in buffers"""
+        try:
+            self._lines = min(len(values), Constants.plot_max_lines)
+            for idx in range(self._lines):
+                self._data_buffers[idx].append(float(values[idx]))
+            logging.debug(f"Stored values: {values[:self._lines]}")
+        except (ValueError, IndexError) as e:
+            logging.error(f"Error storing values: {e}")
 
     def get_time_buffer(self):
         """
@@ -219,22 +221,20 @@ class Worker:
         logging.info("Buffers cleared")
 
     def prepare_plot_data(self):
-        """Prepares and validates data for plotting"""
-        time_data = self.get_time_buffer()
-        if time_data is None or not time_data.size:
-            logging.warning("Time data buffer is empty")
+        """Prepares data for plotting"""
+        time_data = np.array(self.get_time_buffer())
+        if not time_data.size:
             return None, None, 0
-                
+            
         plot_data = []
         for idx in range(self.get_lines()):
-            signal_data = self.get_values_buffer(idx)
-            if signal_data is not None and signal_data.size:
+            signal_data = np.array(self.get_values_buffer(idx))
+            if signal_data.size:
                 plot_data.append({
                     'signal': signal_data,
                     'frequency_change': signal_data - signal_data[0] if signal_data.size > 0 else None,
                     'thickness': (signal_data - signal_data[0]) / Constants.density_factor if signal_data.size > 0 else None
                 })
+                logging.debug(f"Channel {idx} data: {signal_data[-1] if signal_data.size else 'No data'}")
                 
         return time_data, plot_data, len(plot_data)
-    
-    

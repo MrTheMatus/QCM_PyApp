@@ -51,14 +51,8 @@ class SerialProcess(multiprocessing.Process):
         return self._is_port_available(self._serial.port)
 
     def run(self):
-        """
-        Reads the serial port expecting CSV until a stop call is made.
-        The expected format is comma (",") separated values, and a new line (CRLF or LF) as a new row.
-        While running, it will parse CSV data convert each value to float and added to a queue.
-        If incoming data from serial port can't be converted to float, that data will be discarded.
-        :return:
-        """
-        logging.info(  "Process starting...")
+        """Reads the serial port expecting CSV data"""
+        logging.info("Process starting...")
         if self._is_port_available(self._serial.port):
             try:
                 self._serial.open()
@@ -66,13 +60,18 @@ class SerialProcess(multiprocessing.Process):
                 timestamp = time()
                 while not self._exit.is_set():
                     if self._serial.is_open and self._serial.in_waiting:
-                        # Format data to match simulator format
                         line = self._serial.readline()
                         if line:
-                            # Convert to same format as simulator
-                            #decoded_line = line.decode(Constants.app_encoding).strip()
-                            #formatted_line = f"{decoded_line}\r\n".encode(Constants.app_encoding)
-                            self._parser.add(time() - timestamp, line)
+                            try:
+                                # Decode and process the line
+                                decoded_line = line.decode(Constants.app_encoding).strip()
+                                # Convert string to float
+                                value = float(decoded_line)
+                                # Format as CSV
+                                formatted_line = f"{value}\r\n".encode(Constants.app_encoding)
+                                self._parser.add(time() - timestamp, formatted_line)
+                            except (ValueError, UnicodeDecodeError) as e:
+                                logging.error(f"Error processing line: {line}, error: {e}")
             except serial.SerialException as e:
                 logging.error(f"Serial error: {e}")
             finally:

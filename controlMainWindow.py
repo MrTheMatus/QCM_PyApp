@@ -1,5 +1,5 @@
 from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QMainWindow, QListWidgetItem
+from PyQt5.QtWidgets import QMainWindow, QListWidgetItem, QMessageBox
 from PyQt5.QtCore import QTimer
 from ui.ui_main import Ui_AffordableQCM
 from app.worker import Worker
@@ -54,6 +54,13 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.sBox_Samples.setValue(samples)
         self._enable_ui(True)
 
+        # Initialize recording state
+        self.is_recording = False
+        self.process_id = None
+
+        # Configure record button
+        self.ui.recordButton.clicked.connect(self.toggle_recording)
+
     def switch_page(self, index):
         if 0 <= index < self.ui.stackedWidget.count():
             self.ui.stackedWidget.setCurrentIndex(index)
@@ -80,52 +87,86 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             PopUp.warning(self, Constants.app_title, "Port not available.")
 
 
-    def stop(self, *args, **kwargs):
-        self.worker.stop()
-        self._timer_plot.stop()
-        self._enable_ui(True)
-        if self.conn:
-            self.conn.close()
+    def stop(self, checked=False, *args, **kwargs):
+        """Stop acquisition and cleanup
+        Args:
+            checked (bool): Signal parameter from QPushButton click
+        """
+        try:
+            self._timer_plot.stop()
+            self._enable_ui(True)
+            self.worker.stop()
+            
+            if self.is_recording:
+                self.stop_recording()
+                self.ui.recordButton.setText("Start Recording")
+                self.is_recording = False
+        except Exception as e:
+            logging.error(f"Error during stop: {e}")
 
-    def toggle_recording(self):
-        self.is_recording = not self.is_recording
-        if self.is_recording:
-            self.start_recording()
-            self.ui.recordButton.setText("Stop Recording")
-        else:
-            self.stop_recording()
+    def toggle_recording(self, checked=False, *args, **kwargs):
+        """Toggle recording state
+        Args:
+            checked (bool): Signal parameter from QPushButton click
+        """
+        try:
+            if not self.conn or self.conn.total_changes < 0:
+                self.conn = self._initialize_db_connection()
+                
+            if not self.is_recording:
+                self.start_recording()
+                self.ui.recordButton.setText("Stop Recording")
+            else:
+                self.stop_recording() 
+                self.ui.recordButton.setText("Start Recording")
+                
+            self.is_recording = not self.is_recording
+            
+        except Exception as e:
+            logging.error(f"Recording toggle failed: {e}")
+            QMessageBox.warning(self, Constants.app_title, "Failed to toggle recording")
+            self.is_recording = False
             self.ui.recordButton.setText("Start Recording")
 
-    def start_recording(self):
+    def start_recording(self, *args, **kwargs):
+        """Start recording data to database"""
         try:
+            if not self.conn:
+                self.conn = self._initialize_db_connection()
+                
             cursor = self.conn.cursor()
             cursor.execute(
-                """
-                INSERT INTO Process (process_name, start_time) VALUES (?, ?)
-                """,
-                ("Recording", datetime.now()),
+                "INSERT INTO Process (process_name, start_time) VALUES (?, ?)",
+                ("Recording", datetime.now())
             )
             self.process_id = cursor.lastrowid
             self.conn.commit()
-            logging.info(f"Recording started with process ID: {self.process_id}")
+            logging.info(f"Recording started with ID: {self.process_id}")
+            
         except sqlite3.Error as e:
             logging.error(f"Failed to start recording: {e}")
+            raise
 
-    def stop_recording(self):
+    def stop_recording(self, *args, **kwargs):
+        """Stop recording data to database"""
         try:
+            if not self.conn:
+                logging.error("No database connection")
+                return
+                
             cursor = self.conn.cursor()
             cursor.execute(
-                """
-                UPDATE Process SET end_time = ? WHERE process_id = ?
-                """,
-                (datetime.now(), self.process_id),
+                "UPDATE Process SET end_time = ? WHERE process_id = ?",
+                (datetime.now(), self.process_id)
             )
             self.conn.commit()
             logging.info(f"Recording stopped for process ID: {self.process_id}")
+            
         except sqlite3.Error as e:
             logging.error(f"Failed to stop recording: {e}")
+            raise
 
-    def _update_plot(self):
+    def _update_plot(self, *args, **kwargs):
         """Updates all plots with current data"""
         self.worker.consume_queue()
         time_data, plot_data, n_plots = self.worker.prepare_plot_data()
@@ -173,16 +214,29 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                         data['thickness'][-1] if data['thickness'] is not None and data['thickness'].size > 0 else 0
                     )
 
-    def _save_to_database(self, frequency, frequency_change, thickness):
+    def _save_to_database(self, frequency, frequency_change, frequency_rate_of_change):
+        """Save measurement to database"""
+        if not self.is_recording or self.process_id is None:
+            return
+            
         try:
             cursor = self.conn.cursor()
             cursor.execute("""
-                INSERT INTO ProcessData (timestamp, frequency, frequency_change, thickness)
-                VALUES (?, ?, ?, ?)
-            """, (datetime.now(), frequency, frequency_change, thickness))
+                INSERT INTO ProcessData 
+                (process_id, frequency, frequency_change, frequency_rate_of_change, unit, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                self.process_id,
+                float(frequency),
+                float(frequency_change),
+                float(frequency_rate_of_change),
+                'Hz',  # Default unit
+                datetime.now()  # Using created_at instead of timestamp
+            ))
             self.conn.commit()
+            logging.debug(f"Saved data: f={frequency}, Δf={frequency_change}, df/dt={frequency_rate_of_change}")
         except sqlite3.Error as e:
-            logging.error(f"Failed to insert data into database: {e}")
+            logging.error(f"Failed to save data: {e}")
 
     def _enable_ui(self, enabled):
         self.ui.cBox_Port.setEnabled(enabled)
@@ -239,7 +293,6 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.settingsButton.clicked.connect(lambda: self.switch_page(5))
         self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
         self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
-
 
     def _update_sample_size(self):
         if self.worker:
@@ -355,3 +408,15 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         except sqlite3.Error as e:
             logging.error(f"Database connection error: {e}")
             return None
+
+    def closeEvent(self, event):
+        """Handle application close"""
+        try:
+            if self.worker.is_running():
+                self.stop()
+            if self.conn:
+                self.conn.close()
+            event.accept()
+        except Exception as e:
+            logging.error(f"Error during close: {e}")
+            event.accept()

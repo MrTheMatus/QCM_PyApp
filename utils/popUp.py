@@ -1,4 +1,5 @@
 from PyQt5 import QtGui
+from PyQt5.QtWidgets import QMessageBox
 from utils.logdecorator import log_calls, log_all_methods
 
 @log_all_methods
@@ -36,4 +37,4 @@ class PopUp:
         :type message: str.
         :return:
         """
-        QtGui.QMessageBox.warning(parent, title, message, QtGui.QMessageBox.Ok)
+        QMessageBox.warning(parent, title, message, QMessageBox.Ok)
