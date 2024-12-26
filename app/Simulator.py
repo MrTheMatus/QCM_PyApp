@@ -47,15 +47,16 @@ class SimulatorProcess(multiprocessing.Process):
         Simulates raw data incoming as CSV.
         :return:
         """
-        logging.info(  "Process starting...")
+        logging.info("Process starting...")
         timestamp = time()
         coef = 2 * np.pi
         while not self._exit.is_set():
             stamp = time() - timestamp
-            self._parser.add([stamp, str(("{},{}\r\n".format(np.sin(coef * stamp), np.cos(coef * stamp))))
-                             .encode(Constants.app_encoding)])
+            # Format data same as serial output and pass parameters separately
+            line = "{},{}\r\n".format(np.sin(coef * stamp), np.cos(coef * stamp)).encode(Constants.app_encoding)
+            self._parser.add(stamp, line)
             sleep(self._period)
-        logging.info(  "Process finished")
+        logging.info("Process finished")
 
     def stop(self):
         """

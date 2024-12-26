@@ -126,40 +126,52 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             logging.error(f"Failed to stop recording: {e}")
 
     def _update_plot(self):
+        """Updates all plots with current data"""
         self.worker.consume_queue()
-        time_data = self.worker.get_time_buffer()
-
-        if not time_data.size:
-            logging.warning("Time data is empty, skipping plot update.")
+        time_data, plot_data, n_plots = self.worker.prepare_plot_data()
+        
+        if time_data is None or not time_data.size or n_plots == 0:
             return
-
+            
+        # Clear all plots
         self._plt.clear()
-        self._plt_4.clear()
+        self._plt_4.clear() 
         self._plt_2.clear()
         self._plt_6.clear()
 
-        for idx in range(self.worker.get_lines()):
-            signal_data = self.worker.get_values_buffer(idx)
+        # Update plots with new data
+        for idx, data in enumerate(plot_data):
+            # Main plot 
+            self._plt.plot(x=time_data, y=data['signal'], 
+                        pen=Constants.plot_colors[idx])
 
-            if signal_data.size:
-                # Main connection page plot
-                self._plt.plot(x=time_data, y=signal_data, pen=Constants.plot_colors[idx])
-
-                # Additional plots
-                if idx == 0 and signal_data.size > 0:
-                    self._plt_6.plot(x=time_data, y=signal_data, pen=Constants.plot_colors[idx])
-                    self._plt_2.plot(x=time_data, y=signal_data - signal_data[0], pen=Constants.plot_colors[idx])
-                    thickness = (signal_data - signal_data[0]) / Constants.density_factor  # Replace with correct calculation
-                    self._plt_4.plot(x=time_data, y=thickness, pen=Constants.plot_colors[idx])
-
-                    # Update the frequency line edit
-                    current_frequency = signal_data[-1]
+            if idx == 0:  # First channel special handling
+                # Update frequency display first
+                if data['signal'] is not None and data['signal'].size > 0:
+                    current_frequency = data['signal'][-1]
                     self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
-            else:
-                logging.warning(f"Signal data for line {idx} is empty.")
 
-                if self.is_recording:
-                    self._save_to_database(signal_data[-1], signal_data[-1] - tare, (signal_data[-1] - tare) / density)
+                # Frequency plot
+                self._plt_6.plot(x=time_data, y=data['signal'],
+                            pen=Constants.plot_colors[idx])
+                
+                # Frequency change plot
+                if data['frequency_change'] is not None and data['frequency_change'].size > 0:
+                    self._plt_2.plot(x=time_data, y=data['frequency_change'],
+                                pen=Constants.plot_colors[idx])
+                
+                # Thickness plot 
+                if data['thickness'] is not None and data['thickness'].size > 0:
+                    self._plt_4.plot(x=time_data, y=data['thickness'],
+                                pen=Constants.plot_colors[idx])
+
+                # Save to database if recording
+                if self.is_recording and data['signal'].size > 0:
+                    self._save_to_database(
+                        data['signal'][-1],
+                        data['frequency_change'][-1] if data['frequency_change'] is not None and data['frequency_change'].size > 0 else 0,
+                        data['thickness'][-1] if data['thickness'] is not None and data['thickness'].size > 0 else 0
+                    )
 
     def _save_to_database(self, frequency, frequency_change, thickness):
         try:

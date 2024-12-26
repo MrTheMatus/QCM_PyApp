@@ -60,18 +60,24 @@ class SerialProcess(multiprocessing.Process):
         """
         logging.info(  "Process starting...")
         if self._is_port_available(self._serial.port):
-            if not self._serial.isOpen():
+            try:
                 self._serial.open()
-                logging.info(  "Port opened")
+                logging.info("Port opened")
                 timestamp = time()
                 while not self._exit.is_set():
-                    self._parser.add(time() - timestamp, self._serial.readline())
-                logging.info(  "Process finished")
+                    if self._serial.is_open and self._serial.in_waiting:
+                        # Format data to match simulator format
+                        line = self._serial.readline()
+                        if line:
+                            # Convert to same format as simulator
+                            #decoded_line = line.decode(Constants.app_encoding).strip()
+                            #formatted_line = f"{decoded_line}\r\n".encode(Constants.app_encoding)
+                            self._parser.add(time() - timestamp, line)
+            except serial.SerialException as e:
+                logging.error(f"Serial error: {e}")
+            finally:
                 self._serial.close()
-            else:
-                logging.warning(  "Port is not opened")
-        else:
-            logging.warning(  "Port is not available")
+        logging.info("Process finished")
 
     def stop(self):
         """

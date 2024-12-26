@@ -55,33 +55,28 @@ class ParserProcess(multiprocessing.Process):
 
 
     def _parse_csv(self, time, line):
-        """
-        Parses incoming data and distributes to external processes.
-        :param time: Timestamp.
-        :type time: float.
-        :param line: Raw data coming from the acquisition process.
-        :type line: str or bytes.
-        """
-        if not line or len(line) == 0:
-            logging.warning(f"Empty or invalid line received: {line}")
-            return
-
+        """Parse incoming data."""
         try:
+            # Handle bytes or string input
             if isinstance(line, bytes):
-                values = line.decode("UTF-8").strip().split(self._split)
-            elif isinstance(line, str):
-                values = line.strip().split(self._split)
-            else:
-                raise TypeError("Unsupported line type")
-
-            # Convert values to float
-            values = [float(v) for v in values if v]
-            logging.debug(f"Parsed values: {values}")
-
-            # Push data to the output queue
-            self._out_queue.put((time, values))
-            if self._store_reference:
-                self._store_reference.add(time, values)
+                line = line.decode(Constants.app_encoding)
+                
+            # Clean the data
+            line = line.strip()
+            
+            # Split and convert to float
+            values = [float(x.strip()) for x in line.split(self._split) if x.strip()]
+            
+            # Send to output queue
+            if values:
+                self._out_queue.put((time, values))
+                
+                # If store reference exists, save to file
+                if self._store_reference is not None:
+                    self._store_reference.add(time, values)
+                    
+        except ValueError as e:
+            logging.warning(f"Could not parse line: {line}, error: {e}")
         except Exception as e:
-            logging.error(f"Error parsing line: {line}. Exception: {e}")
+            logging.error(f"Error processing line: {line}, error: {e}")
 

@@ -217,3 +217,24 @@ class Worker:
         while not self._queue.empty():
             self._queue.get()
         logging.info("Buffers cleared")
+
+    def prepare_plot_data(self):
+        """Prepares and validates data for plotting"""
+        time_data = self.get_time_buffer()
+        if time_data is None or not time_data.size:
+            logging.warning("Time data buffer is empty")
+            return None, None, 0
+                
+        plot_data = []
+        for idx in range(self.get_lines()):
+            signal_data = self.get_values_buffer(idx)
+            if signal_data is not None and signal_data.size:
+                plot_data.append({
+                    'signal': signal_data,
+                    'frequency_change': signal_data - signal_data[0] if signal_data.size > 0 else None,
+                    'thickness': (signal_data - signal_data[0]) / Constants.density_factor if signal_data.size > 0 else None
+                })
+                
+        return time_data, plot_data, len(plot_data)
+    
+    
