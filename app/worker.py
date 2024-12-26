@@ -20,7 +20,7 @@ class Worker:
     Concentrates all workers (processes) to run the application.
     """
     def __init__(self, port=None, speed=Constants.serial_default_speed, samples=Constants.argument_default_samples,
-                 source=SourceType.serial, export_enabled=False, export_path=Constants.app_export_path, db_path="deploy/db/database.db"):
+                 source=SourceType.serial, export_enabled=False, export_path=Constants.app_export_path, db_path="deploy/db/database.db", material_density=None):
         """
         Creates and orchestrates all processes involved in data acquisition, processing and storing.
         :param port: Port to open on start.
@@ -53,6 +53,7 @@ class Worker:
         self._export = export_enabled
         self._path = export_path
         self._db_path = db_path  # Database path
+        self.material_density = material_density
 
     def start(self):
         """
@@ -233,8 +234,12 @@ class Worker:
                 plot_data.append({
                     'signal': signal_data,
                     'frequency_change': signal_data - signal_data[0] if signal_data.size > 0 else None,
-                    'thickness': (signal_data - signal_data[0]) / Constants.density_factor if signal_data.size > 0 else None
+                    'thickness': (signal_data - signal_data[0]) / self.material_density if signal_data.size > 0 else None
                 })
                 logging.debug(f"Channel {idx} data: {signal_data[-1] if signal_data.size else 'No data'}")
                 
         return time_data, plot_data, len(plot_data)
+
+    def set_material_density(self, density):
+        """Set the material density for thickness calculation."""
+        self.material_density = density

@@ -61,23 +61,29 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         # Configure record button
         self.ui.recordButton.clicked.connect(self.toggle_recording)
 
+        # Initialize material handling
+        self.current_density = None
+        self._populate_material_combobox()
+
     def switch_page(self, index):
         if 0 <= index < self.ui.stackedWidget.count():
             self.ui.stackedWidget.setCurrentIndex(index)
             if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
                 self.load_materials()
 
-    def start(self, checked=False):
+    def start(self, checked=False, *args, **kwargs):
         """
         Starts data acquisition.
         """
         logging.info("Starting acquisition...")
+        self.current_density = self.ui.materialComboBox.currentData()
         self.worker = Worker(
             port=self.ui.cBox_Port.currentText(),
             speed=float(self.ui.cBox_Speed.currentText()),
             samples=self.ui.sBox_Samples.value(),
             source=self._get_source(),
             export_enabled=self.ui.chBox_export.isChecked(),
+            material_density=self.current_density,
         )
         self.worker.reset_buffers(self.ui.sBox_Samples.value())
         if self.worker.start():
@@ -284,6 +290,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.pButton_Stop.clicked.connect(self.stop)
         self.ui.sBox_Samples.valueChanged.connect(self._update_sample_size)
         self.ui.cBox_Source.currentIndexChanged.connect(self._source_changed)
+        self.ui.materialComboBox.currentIndexChanged.connect(self._material_changed)
 
         # Connect all navigation buttons to switch_page with corresponding page indices
         self.ui.homeButton.clicked.connect(lambda: self.switch_page(0))
@@ -332,6 +339,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             item = QListWidgetItem(f"{material['name']} ({material['density']} g/cm³)")
             item.setData(QtCore.Qt.UserRole, material['id'])
             self.ui.materialsListWidget.addItem(item)
+        self._populate_material_combobox()
         logging.info("Materials loaded successfully.")
 
 
@@ -420,3 +428,31 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             logging.error(f"Error during close: {e}")
             event.accept()
+
+    def _populate_material_combobox(self):
+        """Populate material combo box with materials from database"""
+        try:
+            self.ui.materialComboBox.clear()
+            materials = self.material_library.get_materials()
+            for material in materials:
+                self.ui.materialComboBox.addItem(
+                    f"{material['name']} ({material['density']} g/cm³)", 
+                    material['density']
+                )
+            # Set initial density
+            if self.ui.materialComboBox.count() > 0:
+                self.current_density = self.ui.materialComboBox.currentData()
+            logging.debug("Material combo box populated")
+        except Exception as e:
+            logging.error(f"Error populating material combo box: {e}")
+
+    def _material_changed(self, *args, **kwargs):
+        """Handle material change."""
+        if self.is_recording:
+            QMessageBox.warning(self, Constants.app_title, "Cannot change material during recording")
+            self.ui.materialComboBox.blockSignals(True)
+            self.ui.materialComboBox.setCurrentIndex(self.ui.materialComboBox.findData(self.current_density))
+            self.ui.materialComboBox.blockSignals(False)
+            return
+        selected_material = self.ui.materialComboBox.currentData()
+        self.current_density = selected_material
