@@ -1,111 +1,244 @@
+from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtWidgets import QMainWindow, QListWidgetItem, QMessageBox
+from PyQt5.QtCore import QTimer
+from ui.ui_main import Ui_AffordableQCM
+from app.worker import Worker
+from utils.constants import Constants, SourceType
+from utils.popUp import PopUp
+from app.material_library import MaterialLibrary
+from datetime import datetime
+import logging
+import sqlite3
+import csv
+
+logging.basicConfig(level=logging.INFO)
+
+def log_calls(func):
+    def wrapper(*args, **kwargs):
+        logging.info(f"Called function: {func.__name__} | args: {args} | kwargs: {kwargs}")
+        return func(*args, **kwargs)
+    return wrapper
+
+def log_all_methods(cls):
+    for attr_name, attr_value in list(cls.__dict__.items()):
+        if callable(attr_value) and not attr_name.startswith("__"):
+            setattr(cls, attr_name, log_calls(attr_value))
+    return cls
+
+@log_all_methods
 class ControlMainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, port=None, bd=115200, samples=500):
-        super(ControlMainWindow, self).__init__(parent)
+        super().__init__()
         self.ui = Ui_AffordableQCM()
         self.ui.setupUi(self)
+        self.setWindowTitle("Control Main Window")
 
-        self._plt = None
-        self.plt_4_thickness = None
+        self.db_path = "deploy/db/database.db"
+        self.process_id = None
+        self.conn = self._initialize_db_connection()
 
-        self.plt6_Freq = None
-        self._timer_plot = None
-        self.plt_2_changeFreq = None
-        
+        self.is_recording = False
+        self.x_data = []
+        self.y_data = []
+
         self.worker = Worker()
 
-        # configures
         self.ui.cBox_Source.addItems(Constants.app_sources)
+        self.material_library = MaterialLibrary(db_path=self.db_path)
+        self.ui.stackedWidget.setCurrentIndex(0)
         self._configure_plot()
         self._configure_timers()
         self._configure_signals()
-
-        # populate combo box for serial ports
         self._source_changed()
         self.ui.cBox_Source.setCurrentIndex(SourceType.serial.value)
-
         self.ui.sBox_Samples.setValue(samples)
-
-        # enable ui
         self._enable_ui(True)
-        pathname = self.ui.pathLineEdit.text()
-        if pathname== '':
-            pathname="default.csv"
-        with open(pathname, 'w', newline='') as csvfile:
-            fieldnames = ['Absolute Frequency', 'Frequency change', 'Thickness[nm]', 'Timestamp']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-            writer.writeheader()
-            csvfile.close()
+        # Initialize recording state
+        self.is_recording = False
+        self.process_id = None
 
+        # Configure record button
+        self.ui.recordButton.clicked.connect(self.toggle_recording)
 
+    def switch_page(self, index):
+        if 0 <= index < self.ui.stackedWidget.count():
+            self.ui.stackedWidget.setCurrentIndex(index)
+            if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
+                self.load_materials()
 
-        self.ui.saveButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(1))
-        self.ui.materialsButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(2))
-        self.ui.plotsButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(3))
-        self.ui.resetButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(0))
-        self.ui.settingsButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(5))
-        self.ui.connectionButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(4))
-        self.ui.helpButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(6))
-        self.ui.infoButton.clicked.connect(lambda : self.ui.stackedWidget.setCurrentIndex(7))
-        # self.ui.tareButton.clicked(tare = lambda: self.ui.frequencyLineEdit()) 
-            
-        if (self.ui.stackedWidget.currentIndex() == 1):
-            pass
-        if (self.ui.stackedWidget.currentIndex() == 2):
-            pass
-        if (self.ui.stackedWidget.currentIndex() == 4):
-            pass
-        if (self.ui.stackedWidget.currentIndex() == 5):
-            pass
-    def start(self):
+    def start(self, checked=False):
         """
-        Starts the acquisition of the selected serial port.
-        This function is connected to the clicked signal of the Start button.
-        :return:
+        Starts data acquisition.
         """
-        Logger.i(TAG2, "Clicked start")
-        self.worker = Worker(port=self.ui.cBox_Port.currentText(),
-                             speed=float(self.ui.cBox_Speed.currentText()),
-                             samples=self.ui.sBox_Samples.value(),
-                             source=self._get_source(),
-                             export_enabled=self.ui.chBox_export.isChecked())
+        logging.info("Starting acquisition...")
+        self.worker = Worker(
+            port=self.ui.cBox_Port.currentText(),
+            speed=float(self.ui.cBox_Speed.currentText()),
+            samples=self.ui.sBox_Samples.value(),
+            source=self._get_source(),
+            export_enabled=self.ui.chBox_export.isChecked(),
+        )
+        self.worker.reset_buffers(self.ui.sBox_Samples.value())
         if self.worker.start():
             self._timer_plot.start(Constants.plot_update_ms)
             self._enable_ui(False)
         else:
-            Logger.i(TAG2, "Port is not available")
-            PopUp.warning(self, Constants.app_title, "Selected port \"{}\" is not available"
-                          .format(self.ui.cBox_Port.currentText()))
+            PopUp.warning(self, Constants.app_title, "Port not available.")
 
-    def stop(self):
-        """
-        Stops the acquisition of the selected serial port.
-        This function is connected to the clicked signal of the Stop button.
-        :return:
-        """
-        Logger.i(TAG2, "Clicked stop")
-        self._timer_plot.stop()
-        self._enable_ui(True)
-        self.worker.stop()
 
-    def closeEvent(self, evnt):
+    def stop(self, checked=False, *args, **kwargs):
+        """Stop acquisition and cleanup
+        Args:
+            checked (bool): Signal parameter from QPushButton click
         """
-        Overrides the QTCloseEvent.
-        This function is connected to the clicked signal of the close button of the window.
-        :param evnt: QT evnt.
-        :return:
+        try:
+            self._timer_plot.stop()
+            self._enable_ui(True)
+            self.worker.stop()
+            
+            if self.is_recording:
+                self.stop_recording()
+                self.ui.recordButton.setText("Start Recording")
+                self.is_recording = False
+        except Exception as e:
+            logging.error(f"Error during stop: {e}")
+
+    def toggle_recording(self, checked=False, *args, **kwargs):
+        """Toggle recording state
+        Args:
+            checked (bool): Signal parameter from QPushButton click
         """
-        if self.worker.is_running():
-            Logger.i(TAG2, "Window closed without stopping capture, stopping it")
-            self.stop()
+        try:
+            if not self.conn or self.conn.total_changes < 0:
+                self.conn = self._initialize_db_connection()
+                
+            if not self.is_recording:
+                self.start_recording()
+                self.ui.recordButton.setText("Stop Recording")
+            else:
+                self.stop_recording() 
+                self.ui.recordButton.setText("Start Recording")
+                
+            self.is_recording = not self.is_recording
+            
+        except Exception as e:
+            logging.error(f"Recording toggle failed: {e}")
+            QMessageBox.warning(self, Constants.app_title, "Failed to toggle recording")
+            self.is_recording = False
+            self.ui.recordButton.setText("Start Recording")
+
+    def start_recording(self, *args, **kwargs):
+        """Start recording data to database"""
+        try:
+            if not self.conn:
+                self.conn = self._initialize_db_connection()
+                
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO Process (process_name, start_time) VALUES (?, ?)",
+                ("Recording", datetime.now())
+            )
+            self.process_id = cursor.lastrowid
+            self.conn.commit()
+            logging.info(f"Recording started with ID: {self.process_id}")
+            
+        except sqlite3.Error as e:
+            logging.error(f"Failed to start recording: {e}")
+            raise
+
+    def stop_recording(self, *args, **kwargs):
+        """Stop recording data to database"""
+        try:
+            if not self.conn:
+                logging.error("No database connection")
+                return
+                
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "UPDATE Process SET end_time = ? WHERE process_id = ?",
+                (datetime.now(), self.process_id)
+            )
+            self.conn.commit()
+            logging.info(f"Recording stopped for process ID: {self.process_id}")
+            
+        except sqlite3.Error as e:
+            logging.error(f"Failed to stop recording: {e}")
+            raise
+
+    def _update_plot(self, *args, **kwargs):
+        """Updates all plots with current data"""
+        self.worker.consume_queue()
+        time_data, plot_data, n_plots = self.worker.prepare_plot_data()
+        
+        if time_data is None or not time_data.size or n_plots == 0:
+            return
+            
+        # Clear all plots
+        self._plt.clear()
+        self._plt_4.clear() 
+        self._plt_2.clear()
+        self._plt_6.clear()
+
+        # Update plots with new data
+        for idx, data in enumerate(plot_data):
+            # Main plot 
+            self._plt.plot(x=time_data, y=data['signal'], 
+                        pen=Constants.plot_colors[idx])
+
+            if idx == 0:  # First channel special handling
+                # Update frequency display first
+                if data['signal'] is not None and data['signal'].size > 0:
+                    current_frequency = data['signal'][-1]
+                    self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
+
+                # Frequency plot
+                self._plt_6.plot(x=time_data, y=data['signal'],
+                            pen=Constants.plot_colors[idx])
+                
+                # Frequency change plot
+                if data['frequency_change'] is not None and data['frequency_change'].size > 0:
+                    self._plt_2.plot(x=time_data, y=data['frequency_change'],
+                                pen=Constants.plot_colors[idx])
+                
+                # Thickness plot 
+                if data['thickness'] is not None and data['thickness'].size > 0:
+                    self._plt_4.plot(x=time_data, y=data['thickness'],
+                                pen=Constants.plot_colors[idx])
+
+                # Save to database if recording
+                if self.is_recording and data['signal'].size > 0:
+                    self._save_to_database(
+                        data['signal'][-1],
+                        data['frequency_change'][-1] if data['frequency_change'] is not None and data['frequency_change'].size > 0 else 0,
+                        data['thickness'][-1] if data['thickness'] is not None and data['thickness'].size > 0 else 0
+                    )
+
+    def _save_to_database(self, frequency, frequency_change, frequency_rate_of_change):
+        """Save measurement to database"""
+        if not self.is_recording or self.process_id is None:
+            return
+            
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT INTO ProcessData 
+                (process_id, frequency, frequency_change, frequency_rate_of_change, unit, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                self.process_id,
+                float(frequency),
+                float(frequency_change),
+                float(frequency_rate_of_change),
+                'Hz',  # Default unit
+                datetime.now()  # Using created_at instead of timestamp
+            ))
+            self.conn.commit()
+            logging.debug(f"Saved data: f={frequency}, Δf={frequency_change}, df/dt={frequency_rate_of_change}")
+        except sqlite3.Error as e:
+            logging.error(f"Failed to save data: {e}")
 
     def _enable_ui(self, enabled):
-        """
-        Enables or disables the UI elements of the window.
-        :param enabled: The value to be set at the enabled characteristic of the UI elements.
-        :type enabled: bool
-        :return:
-        """
         self.ui.cBox_Port.setEnabled(enabled)
         self.ui.cBox_Speed.setEnabled(enabled)
         self.ui.pButton_Start.setEnabled(enabled)
@@ -114,166 +247,176 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.pButton_Stop.setEnabled(not enabled)
 
     def _configure_plot(self):
-        """
-        Configures specific elements of the PyQtGraph plots.
-        :return:
-        """
-        self._yaxis = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='Frequency', units='Hz')
-        self._yaxis.setFixedWidth(77)
-        self._yaxis.setWidth(77)
-
-        self._yaxis2 = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='thickness', units='nm')
-        self._yaxis2.setFixedWidth(77)
-        self._yaxis2.setWidth(77)
-
-        self._yaxis3 = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='Frequency', units='Hz')
-        self._yaxis3.setFixedWidth(77)
-        self._yaxis3.setWidth(77)
-
-        self._yaxis4 = AxisItem('left', pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True, text='Frequency', units='Hz')
-        self._yaxis4.setFixedWidth(77)
-        self._yaxis4.setWidth(77)
-
-        self._yaxis.setLabel(show=True)
-        self._yaxis.setGrid(grid=True)
-        #self.ui.plt.setBackground(background=None)
         self.ui.plt.setAntialiasing(True)
-        self._plt = self.ui.plt.addPlot(row=0, col=0, axisItems={'left':self._yaxis})
+        self._plt = self.ui.plt.addPlot(row=0, col=0)
         self._plt.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
 
+        # Plot for thickness (plt_4)
         self.ui.plt_4_thickness.setAntialiasing(True)
-        self._plt_4_thickness = self.ui.plt_4_thickness.addPlot(row=0, col=0, axisItems={'left':self._yaxis2})
-        self._plt_4_thickness.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
+        self._plt_4 = self.ui.plt_4_thickness.addPlot(row=0, col=0)
+        self._plt_4.setLabel('bottom', "Time", "s")
+        self._plt_4.setLabel('left', "Thickness", "nm")
 
-
-        self.ui.plt6_Freq.setAntialiasing(True)
-        self._plt6_Freq = self.ui.plt6_Freq.addPlot(row=0, col=0, axisItems={'left':self._yaxis3})
-        self._plt6_Freq.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
-
+        # Plot for frequency change (plt_2)
         self.ui.plt_2_changeFreq.setAntialiasing(True)
-        self._plt_2_changeFreq = self.ui.plt_2_changeFreq.addPlot(row=0, col=0, axisItems={'left':self._yaxis4})
-        self._plt_2_changeFreq.setLabel('bottom', Constants.plot_xlabel_title, Constants.plot_xlabel_unit)
+        self._plt_2 = self.ui.plt_2_changeFreq.addPlot(row=0, col=0)
+        self._plt_2.setLabel('bottom', "Time", "s")
+        self._plt_2.setLabel('left', "Frequency Change", "Hz")
+
+        # Plot for frequency (plt_6)
+        self.ui.plt6_Freq.setAntialiasing(True)
+        self._plt_6 = self.ui.plt6_Freq.addPlot(row=0, col=0)
+        self._plt_6.setLabel('bottom', "Time", "s")
+        self._plt_6.setLabel('left', "Frequency", "Hz")
 
 
     def _configure_timers(self):
-        """
-        Configures specific elements of the QTimers.
-        :return:
-        """
-        self._timer_plot = QtCore.QTimer(self)
+        self._timer_plot = QTimer(self)
         self._timer_plot.timeout.connect(self._update_plot)
 
     def _configure_signals(self):
-        """
-        Configures the connections between signals and UI elements.
-        :return:
-        """
+        self.ui.fetchButton.clicked.connect(self.load_materials)
+        self.ui.addButton.clicked.connect(self.add_material)
+        self.ui.updateButton.clicked.connect(self.update_material)
+        self.ui.deleteButton.clicked.connect(self.delete_material)
+        self.ui.materialsListWidget.itemClicked.connect(self.populate_material_form)
         self.ui.pButton_Start.clicked.connect(self.start)
         self.ui.pButton_Stop.clicked.connect(self.stop)
         self.ui.sBox_Samples.valueChanged.connect(self._update_sample_size)
         self.ui.cBox_Source.currentIndexChanged.connect(self._source_changed)
 
+        # Connect all navigation buttons to switch_page with corresponding page indices
+        self.ui.homeButton.clicked.connect(lambda: self.switch_page(0))
+        self.ui.databaseButton.clicked.connect(lambda: self.switch_page(2))
+        self.ui.plotsButton.clicked.connect(lambda: self.switch_page(3))
+        self.ui.connectionButton.clicked.connect(lambda: self.switch_page(4))
+        self.ui.settingsButton.clicked.connect(lambda: self.switch_page(5))
+        self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
+        self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
+
     def _update_sample_size(self):
-        """
-        Updates the sample size of the plot.
-        This function is connected to the valueChanged signal of the sample Spin Box.
-        :return:
-        """
-        if self.worker is not None:
-            Logger.i(TAG2, "Changing sample size")
+        if self.worker:
             self.worker.reset_buffers(self.ui.sBox_Samples.value())
 
-    def _update_plot(self):
+    def _source_changed(self, index=None):
         """
-        Updates and redraws the graphics in the plot.
-        This function us connected to the timeout signal of a QTimer.
-        :return:
+        Updates the source and dependent combo boxes on change.
         """
-        self.worker.consume_queue()
-        pathname = self.ui.pathLineEdit.text()
-        if pathname== '':
-            pathname="default.csv"
-            
-        if not (file_exists(pathname)):
-            with open(pathname, 'w', newline='') as csvfile:
-                fieldnames = ['Absolute Frequency', 'Frequency change', 'Thickness[nm]', 'Timestamp']
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                pass
-                writer.writeheader()
-                csvfile.close()
-        else:
-            with open(pathname, 'a', newline='') as f_object:
-               
-                writer_object = csv.writer(f_object)
-                # Pass the list as an argument into
-                # the writerow()
-                xx=[]
-                yy=[]
-                for idx in range(self.worker.get_lines()):
-                    xx=self.worker.get_time_buffer()
-                    yy=self.worker.get_values_buffer(idx)
-                if xx[0] is not None:
-                    self.ui.frequencyLineEdit.setText(str(yy[0]) + " Hz")
-                    List=[yy[0],yy[0]-tare,(yy[0]-tare)/density,datetime.now()]
-                    writer_object.writerow(List)
-    
-        #Close the file object
-                f_object.close()
-
-        # plot data
-        self._plt.clear()
-        for idx in range(self.worker.get_lines()):
-            self._plt.plot(x=self.worker.get_time_buffer(),
-                           y=self.worker.get_values_buffer(idx),
-                           pen=Constants.plot_colors[idx])
-        self._plt_2_changeFreq.clear()
-        for idx in range(self.worker.get_lines()):
-            self._plt_2_changeFreq.plot(x=self.worker.get_time_buffer(),
-                           y=self.worker.get_values_buffer(idx)-tare,
-                           pen=Constants.plot_colors[idx])
-        self._plt6_Freq.clear()
-        for idx in range(self.worker.get_lines()):
-            self._plt6_Freq.plot(x=self.worker.get_time_buffer(),
-                           y=self.worker.get_values_buffer(idx),
-                           pen=Constants.plot_colors[idx])
+        source = self._get_source()  # Fetch the source type based on current index
+        logging.info(f"Scanning source {source.name}")
         
-        self.ui.plt_4_thickness.clear()
-        for idx in range(self.worker.get_lines()):
-            self._plt_4_thickness.plot(x=self.worker.get_time_buffer(),
-                           y=(self.worker.get_values_buffer(idx)-tare)/density,
-                           pen=Constants.plot_colors[idx])
-
-
-
-    def _source_changed(self):
-        """
-        Updates the source and depending boxes on change.
-        This function is connected to the indexValueChanged signal of the Source ComboBox.
-        :return:
-        """
-        Logger.i(TAG2, "Scanning source {}".format(self._get_source().name))
-        # clear boxes before adding new
+        # Clear and repopulate combo boxes
         self.ui.cBox_Port.clear()
         self.ui.cBox_Speed.clear()
-
-        source = self._get_source()
-        ports = self.worker.get_source_ports(source)
-        speeds = self.worker.get_source_speeds(source)
-
-        if ports is not None:
+        ports = Worker.get_source_ports(source)
+        speeds = Worker.get_source_speeds(source)
+        if ports:
             self.ui.cBox_Port.addItems(ports)
-        if speeds is not None:
+        if speeds:
             self.ui.cBox_Speed.addItems(speeds)
-        if self._get_source() == SourceType.serial:
+        if source == SourceType.serial and speeds:
             self.ui.cBox_Speed.setCurrentIndex(len(speeds) - 1)
 
+
     def _get_source(self):
-        """
-        Gets the current source type.
-        :return: Current Source type.
-        :rtype: SourceType.
-        """
         return SourceType(self.ui.cBox_Source.currentIndex())
 
-    
-        
+    def load_materials(self, *args, **kwargs):
+        """Load materials from the database and display them in the list widget."""
+        self.ui.materialsListWidget.clear()
+        materials = self.material_library.get_materials()
+        if not materials:
+            logging.warning("No materials found in the database.")
+            return
+        for material in materials:
+            item = QListWidgetItem(f"{material['name']} ({material['density']} g/cm³)")
+            item.setData(QtCore.Qt.UserRole, material['id'])
+            self.ui.materialsListWidget.addItem(item)
+        logging.info("Materials loaded successfully.")
+
+
+    def add_material(self, *args, **kwargs):
+        """Add a new material to the database."""
+        name = self.ui.materialEditLineEdit.text()
+        density = self.ui.densityEditLineEdit.text()
+
+        if name and density:
+            self.material_library.add_material(name, float(density))
+            self.load_materials()
+        logging.info("Material added successfully.")
+
+    def update_material(self, *args, **kwargs):
+        """Update the selected material in the database."""
+        selected_item = self.ui.materialsListWidget.currentItem()
+        if not selected_item:
+            logging.warning("No material selected for update.")
+            return
+
+        material_id = selected_item.data(QtCore.Qt.UserRole)
+        name = self.ui.materialEditLineEdit.text()
+        density = self.ui.densityEditLineEdit.text()
+
+        if name and density:
+            self.material_library.update_material(material_id, name, float(density))
+            self.load_materials()
+        logging.info(f"Material with ID {material_id} updated successfully.")
+
+    def delete_material(self, *args, **kwargs):
+        """Delete the selected material from the database."""
+        selected_item = self.ui.materialsListWidget.currentItem()
+        if not selected_item:
+            logging.warning("No material selected for deletion.")
+            return
+
+        material_id = selected_item.data(QtCore.Qt.UserRole)
+        self.material_library.delete_material(material_id)
+        self.load_materials()
+        logging.info(f"Material with ID {material_id} deleted successfully.")
+
+    def populate_material_form(self, item):
+        material_id = item.data(QtCore.Qt.UserRole)
+        material = self.material_library.get_material_by_id(material_id)
+        if material:
+            self.ui.materialEditLineEdit.setText(material['name'])
+            self.ui.densityEditLineEdit.setText(str(material['density']))
+
+    def _initialize_db_connection(self):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS Process (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    process_name TEXT,
+                    start_time DATETIME,
+                    end_time DATETIME
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ProcessData (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    process_id INTEGER,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    frequency REAL,
+                    frequency_change REAL,
+                    thickness REAL,
+                    FOREIGN KEY (process_id) REFERENCES Process (id)
+                )
+            """)
+            conn.commit()
+            return conn
+        except sqlite3.Error as e:
+            logging.error(f"Database connection error: {e}")
+            return None
+
+    def closeEvent(self, event):
+        """Handle application close"""
+        try:
+            if self.worker.is_running():
+                self.stop()
+            if self.conn:
+                self.conn.close()
+            event.accept()
+        except Exception as e:
+            logging.error(f"Error during close: {e}")
+            event.accept()

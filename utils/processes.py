@@ -1,3 +1,16 @@
+import logging
+import multiprocessing
+import serial
+from serial.tools import list_ports
+from utils.constants import Constants
+from utils.architecture import Architecture, OSType
+import time
+from time import sleep
+import socket
+import numpy as np
+from utils.logdecorator import log_calls, log_all_methods
+
+@log_all_methods
 class SerialProcess(multiprocessing.Process):
     """
     Wrapper for serial package into a multiprocessing instance.
@@ -12,7 +25,7 @@ class SerialProcess(multiprocessing.Process):
         self._exit = multiprocessing.Event()
         self._parser = parser_process
         self._serial = serial.Serial()
-        Logger.i(TAG5, "Process ready")
+        logging.info(f"{TAG}: Process ready")
 
     def open(self, port, speed=Constants.serial_default_speed, timeout=Constants.serial_timeout_ms):
         """
@@ -41,27 +54,27 @@ class SerialProcess(multiprocessing.Process):
         If incoming data from serial port can't be converted to float, that data will be discarded.
         :return:
         """
-        Logger.i(TAG5, "Process starting...")
+        logging.info(  "Process starting...")
         if self._is_port_available(self._serial.port):
             if not self._serial.isOpen():
                 self._serial.open()
-                Logger.i(TAG5, "Port opened")
+                logging.info(  "Port opened")
                 timestamp = time()
                 while not self._exit.is_set():
                     self._parser.add([time() - timestamp, self._serial.readline()])
-                Logger.i(TAG5, "Process finished")
+                logging.info(  "Process finished")
                 self._serial.close()
             else:
-                Logger.w(TAG5, "Port is not opened")
+                logging.warning("Port is not opened")
         else:
-            Logger.w(TAG5, "Port is not available")
+                logging.warning("Port is not available")
 
     def stop(self):
         """
         Signals the process to stop acquiring data.
         :return:
         """
-        Logger.i(TAG5, "Process finishing...")
+        logging.info(  "Process finishing...")
         self._exit.set()
 
     @staticmethod
@@ -77,7 +90,7 @@ class SerialProcess(multiprocessing.Process):
         else:
             found_ports = []
             for port in list(list_ports.comports()):
-                Logger.d(TAG5, "found device {}".format(port))
+                logging.debug("{}, found device {}".format(TAG, port))
                 found_ports.append(port.device)
             return found_ports
 
@@ -102,7 +115,7 @@ class SerialProcess(multiprocessing.Process):
                 return True
         return False
 
-TAG6 = "Simulator"
+TAG = "Simulator"
 
 
 class SimulatorProcess(multiprocessing.Process):
@@ -119,7 +132,7 @@ class SimulatorProcess(multiprocessing.Process):
         self._exit = multiprocessing.Event()
         self._period = None
         self._parser = parser_process
-        Logger.i(TAG6, "Process Ready")
+        logging.info(f"{TAG}: Process ready")
 
     def open(self, port=None, speed=Constants.simulator_default_speed, timeout=0.5):
         """
@@ -134,7 +147,7 @@ class SimulatorProcess(multiprocessing.Process):
         :rtype: bool.
         """
         self._period = float(speed)
-        Logger.i(TAG6, "Using sample rate at {}".format(self._period))
+        logging.info(  "Using sample rate at {}".format(self._period))
         return True
 
     def run(self):
@@ -142,7 +155,7 @@ class SimulatorProcess(multiprocessing.Process):
         Simulates raw data incoming as CSV.
         :return:
         """
-        Logger.i(TAG6, "Process starting...")
+        logging.info(  "Process starting...")
         timestamp = time()
         coef = 2 * np.pi
         while not self._exit.is_set():
@@ -150,14 +163,14 @@ class SimulatorProcess(multiprocessing.Process):
             self._parser.add([stamp, str(("{},{}\r\n".format(np.sin(coef * stamp), np.cos(coef * stamp))))
                              .encode(Constants.app_encoding)])
             sleep(self._period)
-        Logger.i(TAG6, "Process finished")
+        logging.info(  "Process finished")
 
     def stop(self):
         """
         Signals the process to stop acquiring data.
         :return:
         """
-        Logger.i(TAG6, "Process finishing...")
+        logging.info(  "Process finishing...")
         self._exit.set()
 
     @staticmethod
@@ -178,7 +191,7 @@ class SimulatorProcess(multiprocessing.Process):
         """
         return [str(v) for v in [0.002, 0.004, 0.005, 0.010, 0.020, 0.050, 0.100, 0.250]]
 
-TAG7 = "Socket"
+TAG = "Socket"
 
 
 class SocketProcess(multiprocessing.Process):
@@ -195,7 +208,7 @@ class SocketProcess(multiprocessing.Process):
         self._exit = multiprocessing.Event()
         self._parser = parser_process
         self._socket_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        Logger.i(TAG7, "Process Ready")
+        logging.info(f"{TAG}: Process ready")
 
     def open(self, port='', speed=5555, timeout=0.01):
         """
@@ -213,10 +226,10 @@ class SocketProcess(multiprocessing.Process):
             #self._socket_client.timeout = timeout
             speed = int(speed)
             self._socket_client.connect((port, speed))
-            Logger.i(TAG7, "Socket open {}:{}".format(port, speed))
+            logging.info(  "Socket open {}:{}".format(port, speed))
             return True
         except socket.timeout:
-            Logger.w(TAG7, "Connection timeout")
+            logging.warning("Connection timeout")
         return False
 
     def run(self):
@@ -224,7 +237,7 @@ class SocketProcess(multiprocessing.Process):
         Reads the socket until a stop call is made.
         :return:
         """
-        Logger.i(TAG7, "Process starting...")
+        logging.info(  "Process starting...")
         timestamp = time()
 
         while not self._exit.is_set():
@@ -234,15 +247,15 @@ class SocketProcess(multiprocessing.Process):
                 if len(data) > 0:
                     self._parser.add([stamp, data])
             except socket.timeout:
-                Logger.w(TAG7, "read timeout")
-        Logger.i(TAG7, "Process finished")
+                logging.warning("read timeout")
+        logging.info(  "Process finished")
 
     def stop(self):
         """
         Signals the process to stop acquiring data.
         :return:
         """
-        Logger.i(TAG7, "Process finishing...")
+        logging.info(  "Process finishing...")
         self._socket_client.close()
         self._exit.set()
 
@@ -268,4 +281,4 @@ class SocketProcess(multiprocessing.Process):
         :return: str list.
         """
         return [str(v) for v in Constants.SocketClient.port_default]
-TAG8 = "Worker"
+TAG = "Worker"

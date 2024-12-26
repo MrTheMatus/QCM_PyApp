@@ -1,15 +1,26 @@
+from multiprocessing import Queue
 
+from utils.constants import Constants, SourceType
+from utils.ringBuffer import RingBuffer
+from utils import CSVProcess
+from utils.Parser import ParserProcess
+from app.Serial import SerialProcess
+from app.SocketClient import SocketProcess
+from app.Simulator import SimulatorProcess
+import logging
+from utils.logdecorator import log_calls, log_all_methods
+import numpy as np
+
+
+TAG = "Worker"
+
+@log_all_methods
 class Worker:
     """
     Concentrates all workers (processes) to run the application.
     """
-    def __init__(self,
-                 port=None,
-                 speed=Constants.serial_default_speed,
-                 samples=Constants.argument_default_samples,
-                 source=SourceType.serial,
-                 export_enabled=False,
-                 export_path=Constants.app_export_path):
+    def __init__(self, port=None, speed=Constants.serial_default_speed, samples=Constants.argument_default_samples,
+                 source=SourceType.serial, export_enabled=False, export_path=Constants.app_export_path, db_path="deploy/db/database.db"):
         """
         Creates and orchestrates all processes involved in data acquisition, processing and storing.
         :param port: Port to open on start.
@@ -33,6 +44,7 @@ class Worker:
         self._acquisition_process = None
         self._parser_process = None
         self._csv_process = None
+        self._db_process = None  # Database process
 
         self._port = port
         self._speed = float(speed)
@@ -40,6 +52,7 @@ class Worker:
         self._source = source
         self._export = export_enabled
         self._path = export_path
+        self._db_path = db_path  # Database path
 
     def start(self):
         """
@@ -47,8 +60,10 @@ class Worker:
         :return:
         """
         self.reset_buffers(self._samples)
+
         if self._export:
             self._csv_process = CSVProcess(path=self._path)
+            self._db_process = DatabaseProcess(db_path=self._db_path)
             self._parser_process = ParserProcess(self._queue, store_reference=self._csv_process)
         else:
             self._parser_process = ParserProcess(self._queue)
@@ -59,25 +74,16 @@ class Worker:
             self._acquisition_process = SimulatorProcess(self._parser_process)
         elif self._source == SourceType.SocketClient:
             self._acquisition_process = SocketProcess(self._parser_process)
+
         if self._acquisition_process.open(port=self._port, speed=self._speed):
-            
-            # self._parser_process.start()
-            '''
-            TypeError: can't pickle weakref objects when running demo in Simulator mode #7
-            https://github.com/ssepulveda/RTGraph/issues/7 
-            issue for python 3.7 
-            this error occurred because self._parser_process.start() is called before self._acquisition_process.start()
-            
-            '''
             if self._export:
                 self._csv_process.start()
-            # call first acquisition 
-            self._acquisition_process.start() 
-            # call after parser 
+                self._db_process.start()
+            self._acquisition_process.start()
             self._parser_process.start()
             return True
         else:
-            Logger.i(TAG8, "Port is not available")
+            logging.info("Port is not available")
             return False
 
     def stop(self):
@@ -86,8 +92,8 @@ class Worker:
         :return:
         """
         self.consume_queue()
-        for process in [self._acquisition_process, self._parser_process, self._csv_process]:
-            if process is not None and process.is_alive():
+        for process in [self._acquisition_process, self._parser_process, self._csv_process, self._db_process]:
+            if process and process.is_alive():
                 process.stop()
                 process.join(Constants.process_join_timeout_ms)
 
@@ -100,35 +106,35 @@ class Worker:
             self._store_data(self._queue.get(False))
 
     def _store_data(self, data):
-        """
-        Adds data to internal time and data buffers.
-        :param data: values to add to internal buffers.
-        :type data: list.
-        :return:
-        """
-        # Add timestamp
-        self._time_buffer.append(data[0])
-        # Add values
-        self._store_signal_values(data[1])
+        """Store data in buffers."""
+        if not data or len(data) < 2:
+            logging.warning(f"Invalid data format: {data}")
+            return
+            
+        timestamp, values = data
+        
+        if not values:
+            logging.warning("No values to store")
+            return
+            
+        # Store timestamp
+        self._time_buffer.append(timestamp)
+        
+        # Store values
+        self._store_signal_values(values)
+        
+        # Log for debugging
+        logging.debug(f"Stored values: {values}")
 
     def _store_signal_values(self, values):
-        """
-        Stores the signal values in internal buffers.
-        :param values: Values to store.
-        :type values: float list.
-        :return:
-        """
-        # detect how many lines are present to plot
-        size = len(values)
-        if self._lines < size:
-            if size > Constants.plot_max_lines:
-                self._lines = Constants.plot_max_lines
-            else:
-                self._lines = size
-
-        # store the data in respective buffers
-        for idx in range(self._lines):
-            self._data_buffers[idx].append(values[idx])
+        """Store signal values in buffers"""
+        try:
+            self._lines = min(len(values), Constants.plot_max_lines)
+            for idx in range(self._lines):
+                self._data_buffers[idx].append(float(values[idx]))
+            logging.debug(f"Stored values: {values[:self._lines]}")
+        except (ValueError, IndexError) as e:
+            logging.error(f"Error storing values: {e}")
 
     def get_time_buffer(self):
         """
@@ -146,9 +152,6 @@ class Worker:
         :return: float list.
         """
         return self._data_buffers[idx].get_all()
-
-    def get_last(self, idx=0):
-        return self._data_buffers[idx].get_last()
 
     def get_lines(self):
         """
@@ -182,7 +185,7 @@ class Worker:
         elif source == SourceType.SocketClient:
             return SocketProcess.get_default_host()
         else:
-            Logger.w(TAG8, "Unknown source selected")
+            logging.warning(  "Unknown source selected")
             return None
 
     @staticmethod
@@ -201,7 +204,7 @@ class Worker:
         elif source == SourceType.SocketClient:
             return SocketProcess.get_default_port()
         else:
-            Logger.w(TAG8, "Unknown source selected")
+            logging.warning(  "Unknown source selected")
             return None
 
     def reset_buffers(self, samples):
@@ -211,10 +214,27 @@ class Worker:
         :type samples: int.
         :return:
         """
-        self._data_buffers = []
-        for tmp in Constants.plot_colors:
-            self._data_buffers.append(RingBuffer(samples))
+        self._data_buffers = [RingBuffer(samples) for _ in Constants.plot_colors]
         self._time_buffer = RingBuffer(samples)
         while not self._queue.empty():
             self._queue.get()
-        Logger.i(TAG8, "Buffers cleared")
+        logging.info("Buffers cleared")
+
+    def prepare_plot_data(self):
+        """Prepares data for plotting"""
+        time_data = np.array(self.get_time_buffer())
+        if not time_data.size:
+            return None, None, 0
+            
+        plot_data = []
+        for idx in range(self.get_lines()):
+            signal_data = np.array(self.get_values_buffer(idx))
+            if signal_data.size:
+                plot_data.append({
+                    'signal': signal_data,
+                    'frequency_change': signal_data - signal_data[0] if signal_data.size > 0 else None,
+                    'thickness': (signal_data - signal_data[0]) / Constants.density_factor if signal_data.size > 0 else None
+                })
+                logging.debug(f"Channel {idx} data: {signal_data[-1] if signal_data.size else 'No data'}")
+                
+        return time_data, plot_data, len(plot_data)

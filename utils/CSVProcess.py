@@ -1,6 +1,13 @@
-TAG3 = "CSV"
+import multiprocessing
+from utils.constants import Constants
+import logging
+from utils.fileManager import FileManager
+from time import gmtime, sleep, strftime
+import csv
+from utils.logdecorator import log_calls, log_all_methods
+TAG = "CSV"
 
-
+@log_all_methods
 class CSVProcess(multiprocessing.Process):
     """
     Process to store and export data to a file.
@@ -26,7 +33,7 @@ class CSVProcess(multiprocessing.Process):
         if filename is None:
             filename = strftime(Constants.csv_default_filename, gmtime())
         self._file = self._create_file(filename, path=path)
-        Logger.i(TAG3, "Process ready")
+        logging.info(f"{TAG}: Process ready")
 
     def add(self, time, values):
         """
@@ -48,14 +55,14 @@ class CSVProcess(multiprocessing.Process):
         and the process will loop again after timeout if more data is available.
         :return:
         """
-        Logger.i(TAG3, "Process starting...")
+        logging.info(  "Process starting...")
         self._csv = csv.writer(self._file, delimiter=Constants.csv_delimiter, quoting=csv.QUOTE_MINIMAL)
         while not self._exit.is_set():
             self._consume_queue()
             sleep(self._timeout)
         # last check on the queue to completely remove data.
         self._consume_queue()
-        Logger.i(TAG3, "Process finished")
+        logging.info(  "Process finished")
         self._file.close()
 
     def _consume_queue(self):
@@ -75,7 +82,7 @@ class CSVProcess(multiprocessing.Process):
         Signals the process to stop storing data.
         :return:
         """
-        Logger.i(TAG3, "Process finishing...")
+        logging.info(  "Process finishing...")
         self._exit.set()
 
     @staticmethod
@@ -93,6 +100,6 @@ class CSVProcess(multiprocessing.Process):
         FileManager.create_dir(path)
         full_path = FileManager.create_file(filename, extension=extension, path=path)
         if not FileManager.file_exists(full_path):
-            Logger.i(TAG3, "Storing in {}".format(full_path))
+            logging.info(  "Storing in {}".format(full_path))
             return open(full_path, "a", newline='')
         return None

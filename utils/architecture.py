@@ -1,3 +1,12 @@
+from enum import Enum
+from pyqtgraph import AxisItem
+import sys
+import platform
+import logging
+import argparse
+from utils.logdecorator import log_calls, log_all_methods
+
+@log_all_methods
 class Architecture:
     """
     Wrappers for architecture specific methods.
@@ -77,7 +86,7 @@ class OSType(Enum):
 
 
 
-TAG2 = "Arguments"
+TAG = "Arguments"
 
 
 class Arguments:
@@ -127,7 +136,7 @@ class Arguments:
         if self._parser is not None:
             self._parse_log_level()
         else:
-            Logger.w(TAG2, "Parser was not created !")
+            #logging.warning(  "Parser was not created !")
             return None
 
     def get_user_samples(self):
@@ -153,12 +162,11 @@ class Arguments:
         :return:
         """
         log_to_console = self.get_user_console_log()
-        level = LoggerLevel.INFO
+        level = logging.INFO
         if self._parser.log_level_info:
-            level = LoggerLevel.INFO
+            level = logging.INFO
         elif self._parser.log_level_debug:
-            level = LoggerLevel.DEBUG
-        Logger(level, enable_console=log_to_console)
+            level = logging.DEBUG
 
 class SourceType(Enum):
     """

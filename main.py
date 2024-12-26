@@ -1,48 +1,61 @@
-import os
-from PyQt5 import QtCore, QtGui, QtWidgets
-from pyqtgraph import GraphicsLayoutWidget, PlotWidget
-import argparse
-import platform
 import sys
+from PyQt5 import QtWidgets
+from controlMainWindow import ControlMainWindow
 import logging
-import logging.handlers
-from enum import Enum
-import multiprocessing
-from time import sleep
-from multiprocessing import Queue
-from time import time
-import serial
-from serial.tools import list_ports
-import socket
-import numpy as np
-import csv
-import multiprocessing
-from time import strftime, gmtime, sleep
-from pyqtgraph import AxisItem
-import platform
-import string
-from csv import writer
-from datetime import datetime
-from os.path import exists as file_exists
-import architecture
-import CSVProcess
-import FileManager
-import Logger
-import ParserProcess
-import PopUp
-import RingBuffer
-import SerialProcess
-import SimulatorProcess
-import SocketProcess
-import Worker
-import Ui 
-import ControlWindow
+import atexit
+
+logging.basicConfig(
+    filename="log.txt",
+    filemode="a",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+
+logging.info("Logging test - INFO level")
+logging.debug("Logging test - DEBUG level")
+print("Logging test executed")
 
 
+def sample_method():
+    logging.info("Sample method called")
+    print("Sample method executed")
+
+sample_method()
+
+def cleanup_logging():
+    logging.shutdown()
+
+atexit.register(cleanup_logging)
+
+# Example: Redirecting sys.settrace logs
+def trace_calls(frame, event, arg):
+    if event != "call":
+        return
+
+    code = frame.f_code
+    func_name = code.co_name
+    file_name = code.co_filename
+
+    # Exclude specific logs if necessary
+    if "eventFilter" in func_name or "eventFilter" in file_name:
+        return
+
+    logging.debug(f"Calling {func_name} in {file_name}:{code.co_firstlineno}")
+    return trace_calls
+
+# Entry point
 if __name__ == "__main__":
-    import sys
+    sys.settrace(trace_calls)  # Enable method tracing
+
+    logging.info("Initializing QApplication")
     app = QtWidgets.QApplication(sys.argv)
-    mySW = ControlMainWindow()
-    mySW.show()
+
+    logging.info("Initializing ControlMainWindow")
+    window = ControlMainWindow()
+
+    logging.info("Showing Main Window")
+    window.show()
+
+    logging.info("Entering application event loop")
     sys.exit(app.exec_())
 
