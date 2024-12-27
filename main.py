@@ -8,7 +8,7 @@ logging.basicConfig(
     filename="log.txt",
     filemode="a",
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    level=logging.WARNING
 )
 
 logging.info("Logging test - INFO level")

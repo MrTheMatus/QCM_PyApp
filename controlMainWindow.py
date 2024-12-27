@@ -174,64 +174,49 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             raise
 
     def _update_plot(self, *args, **kwargs):
-        """Updates all plots with current data"""
         self.worker.consume_queue()
         time_data, plot_data, n_plots = self.worker.prepare_plot_data()
-        
+
         if time_data is None or not time_data.size or n_plots == 0:
+            logging.warning("No data available for plotting.")
             return
-            
-        # Clear all plots
+
+        # Debug raw data
+        logging.debug(f"Plot data content: {plot_data}")
+        
+        # Clear plots
         self._plt.clear()
-        self._plt_4.clear() 
-        self._plt_2.clear()
-        self._plt_6.clear()
-
-        # Debug plot data before processing
-        logging.debug(f"Plot data: {plot_data}")
         
-        # Get first channel data
-        channel_data = plot_data[0] if isinstance(plot_data, list) else plot_data
+        # Initialize frequency variable outside the loop
+        current_frequency = 0.0
         
-        if channel_data['signal'] is not None and channel_data['signal'].size > 0:
-            # Main plot 
-            self._plt.plot(x=time_data, y=channel_data['signal'], 
-                        pen=Constants.plot_colors[0])
-            
-            # Get latest values
-            current_frequency = float(channel_data['signal'][-1])
-            current_thickness = float(channel_data['thickness'][-1]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
-            logging.info(f"cur freq data: {current_frequency:.2f}")
-            logging.info(f"cur th data: {current_thickness:.2f}")
-            sleep(2)
-            # Update displays
-            self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
-            self.ui.thicknessLineEdit.setText(f"{current_thickness:.2f}")
-            self.ui.lcdNumberFreq.display(f"{current_frequency:.2f}")
-            self.ui.lcdNumberThickness.display(f"{current_thickness:.2f}")
-            
-            # Debug values
-            logging.debug(f"Updated displays - Frequency: {current_frequency:.2f}, Thickness: {current_thickness:.2f}")
-            
-            # Plot updates for first channel
-            self._plt_6.plot(x=time_data, y=channel_data['signal'],
-                         pen=Constants.plot_colors[0])
-            
-            if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0:
-                self._plt_2.plot(x=time_data, y=channel_data['frequency_change'],
-                             pen=Constants.plot_colors[0])
-            
-            if channel_data['thickness'] is not None and channel_data['thickness'].size > 0:
-                self._plt_4.plot(x=time_data, y=channel_data['thickness'],
-                             pen=Constants.plot_colors[0])
+        # Plot and extract frequency
+        for idx in range(n_plots):
+            signal_data = plot_data[idx]['signal']
+            if signal_data is not None and len(signal_data) > 0:
+                # Plot the data
+                self._plt.plot(x=time_data, y=signal_data, pen=Constants.plot_colors[idx])
+                # Get the last value
+                current_frequency = float(signal_data[-1])
+                logging.warning(f"Signal data: {signal_data}")
+                logging.debug(f"Last value: {signal_data[-1]}")
+                
+        # Extract thickness from first channel
+        channel_data = plot_data[0]
+        current_thickness = 0.0
 
-            # Save to database if recording
-            if self.is_recording:
-                self._save_to_database(
-                    current_frequency,
-                    channel_data['frequency_change'][-1] if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0 else 0,
-                    current_thickness
-                )
+        if channel_data['thickness'] is not None and len(channel_data['thickness']) > 0:
+            current_thickness = float(channel_data['thickness'][-1])
+
+        # Debug extracted values
+        logging.warning(f"Extracted frequency: {current_frequency}")
+        logging.warning(f"Extracted thickness: {current_thickness}")
+
+        # Update UI
+        self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
+        self.ui.lcdNumberFreq.display(current_frequency)
+        self.ui.thicknessLineEdit.setText(f"{current_thickness:.2f}")
+        self.ui.lcdNumberThickness.display(current_thickness)
 
     def _save_to_database(self, frequency, frequency_change, frequency_rate_of_change):
         """Save measurement to database"""

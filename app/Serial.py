@@ -51,32 +51,31 @@ class SerialProcess(multiprocessing.Process):
         return self._is_port_available(self._serial.port)
 
     def run(self):
-        """Reads the serial port expecting CSV data"""
-        logging.info("Process starting...")
+        logging.info("Serial process starting...")
         if self._is_port_available(self._serial.port):
             try:
                 self._serial.open()
-                logging.info("Port opened")
+                logging.info("Serial port opened.")
                 timestamp = time()
                 while not self._exit.is_set():
                     if self._serial.is_open and self._serial.in_waiting:
                         line = self._serial.readline()
+                        logging.warning(f"Raw data read from serial: {line}")
                         if line:
                             try:
                                 # Decode and process the line
                                 decoded_line = line.decode(Constants.app_encoding).strip()
-                                # Convert string to float
                                 value = float(decoded_line)
-                                # Format as CSV
-                                formatted_line = f"{value}\r\n".encode(Constants.app_encoding)
-                                self._parser.add(time() - timestamp, formatted_line)
+                                self._parser.add(time() - timestamp, value)  # Pass as single value
+                                logging.warning(f"Serial data received: {value}")
                             except (ValueError, UnicodeDecodeError) as e:
                                 logging.error(f"Error processing line: {line}, error: {e}")
             except serial.SerialException as e:
                 logging.error(f"Serial error: {e}")
             finally:
                 self._serial.close()
-        logging.info("Process finished")
+                logging.info("Serial process finished.")
+
 
     def stop(self):
         """

@@ -37,20 +37,20 @@ class ParserProcess(multiprocessing.Process):
         self._exit.set()
 
     def _consume_queue(self):
-        """
-        Consumer method for the queues/process.
-        Used in run method to recall after a stop is requested, to ensure queue is emptied.
-        """
         while not self._in_queue.empty():
+            queue = self._in_queue.get()
             try:
-                # Fetch data from the queue
-                time, line = self._in_queue.get(timeout=self._consumer_timeout)
-                # Ensure proper arguments are passed to _parse_csv
-                self._parse_csv(time, line)
-            except ValueError as ve:
-                logging.warning(f"ValueError while consuming queue: {ve}")
+                # Handle incoming data
+                if isinstance(queue[1], list):  # If multiple values, iterate
+                    values = queue[1]
+                else:  # Single value
+                    values = [queue[1]]
+
+                self._out_queue.put((queue[0], values))
+                logging.debug(f"Parsed and queued values: {values}")
             except Exception as e:
-                logging.error(f"Error consuming queue item: {e}")
+                logging.error(f"Error in parsing: {e}")
+
 
 
 
@@ -60,23 +60,23 @@ class ParserProcess(multiprocessing.Process):
             # Handle bytes or string input
             if isinstance(line, bytes):
                 line = line.decode(Constants.app_encoding)
-                
-            # Clean the data
+            
+            # Clean the line
             line = line.strip()
             
-            # Split and convert to float
-            values = [float(x.strip()) for x in line.split(self._split) if x.strip()]
-            
-            # Send to output queue
-            if values:
-                self._out_queue.put((time, values))
+            if not line:
+                return
                 
-                # If store reference exists, save to file
-                if self._store_reference is not None:
-                    self._store_reference.add(time, values)
-                    
-        except ValueError as e:
-            logging.warning(f"Could not parse line: {line}, error: {e}")
+            # Split and convert values
+            try:
+                # Handle single value case (serial) or multiple values (simulator)
+                values = [float(x.strip()) for x in line.split(self._split) if x.strip()]
+                if values:
+                    self._out_queue.put((time, values))
+                    if self._store_reference is not None:
+                        self._store_reference.add(time, values)
+            except ValueError as e:
+                logging.error(f"Error converting values: {line}, error: {e}")
+                
         except Exception as e:
-            logging.error(f"Error processing line: {line}, error: {e}")
-
+            logging.error(f"Error parsing line: {line}, error: {e}")

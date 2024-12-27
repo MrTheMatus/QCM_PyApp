@@ -107,35 +107,32 @@ class Worker:
             self._store_data(self._queue.get(False))
 
     def _store_data(self, data):
-        """Store data in buffers."""
-        if not data or len(data) < 2:
-            logging.warning(f"Invalid data format: {data}")
-            return
+        """Store data in buffers"""
+        try:
+            timestamp, values = data
+            if not isinstance(values, (list, tuple)):
+                values = [values]  # Convert single value to list
+                
+            # Store timestamp
+            self._time_buffer.append(timestamp)
             
-        timestamp, values = data
-        
-        if not values:
-            logging.warning("No values to store")
-            return
-            
-        # Store timestamp
-        self._time_buffer.append(timestamp)
-        
-        # Store values
-        self._store_signal_values(values)
-        
-        # Log for debugging
-        logging.debug(f"Stored values: {values}")
+            # Store values
+            self._store_signal_values(values)
+            logging.debug(f"Stored values: {values}")
+        except Exception as e:
+            logging.error(f"Error storing data: {e}")
 
     def _store_signal_values(self, values):
-        """Store signal values in buffers"""
         try:
-            self._lines = min(len(values), Constants.plot_max_lines)
+            size = len(values)
+            self._lines = min(size, Constants.plot_max_lines)
+
             for idx in range(self._lines):
-                self._data_buffers[idx].append(float(values[idx]))
-            logging.debug(f"Stored values: {values[:self._lines]}")
-        except (ValueError, IndexError) as e:
-            logging.error(f"Error storing values: {e}")
+                self._data_buffers[idx].append(values[idx])
+                logging.debug(f"Stored value in buffer {idx}: {values[idx]}")
+        except Exception as e:
+            logging.error(f"Error storing signal values: {e}")
+
 
     def get_time_buffer(self):
         """
@@ -222,23 +219,27 @@ class Worker:
         logging.info("Buffers cleared")
 
     def prepare_plot_data(self):
-        """Prepares data for plotting"""
         time_data = np.array(self.get_time_buffer())
         if not time_data.size:
             return None, None, 0
-            
+
         plot_data = []
         for idx in range(self.get_lines()):
             signal_data = np.array(self.get_values_buffer(idx))
-            if signal_data.size:
+            logging.warning(f"Signal data for thickness calculation: {signal_data}")
+            logging.warning(f"Material density: {self.material_density}")
+
+            if signal_data.size > 0:
+                thickness = (signal_data - signal_data[0]) / self.material_density if (self.material_density and signal_data.size > 0) else None
                 plot_data.append({
                     'signal': signal_data,
-                    'frequency_change': signal_data - signal_data[0] if signal_data.size > 0 else None,
-                    'thickness': (signal_data - signal_data[0]) / self.material_density if signal_data.size > 0 else None
+                    'frequency_change': signal_data - signal_data[0],
+                    'thickness': thickness
                 })
-                logging.debug(f"Channel {idx} data: {signal_data[-1] if signal_data.size else 'No data'}")
-                
+                logging.warning(f"Signal data: {signal_data}, Thickness: {thickness}")
         return time_data, plot_data, len(plot_data)
+
+
 
     def set_material_density(self, density):
         """Set the material density for thickness calculation."""

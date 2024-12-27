@@ -37,7 +37,7 @@ class Constants:
 
     process_join_timeout_ms = 1000
 
-    argument_default_samples = 500
+    argument_default_samples = 5
 
     serial_default_speed = 115200
     serial_timeout_ms = 0.5
