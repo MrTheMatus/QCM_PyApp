@@ -48,14 +48,14 @@
       <widget class="QLineEdit" name="nameLineEdit"/>
      </item>
      <item row="1" column="0">
-      <widget class="QLabel" name="labelDensity">
+      <widget class="QLabel" name="labelThickness">
        <property name="text">
-        <string>Density:</string>
+        <string>Thickness:</string>
        </property>
       </widget>
      </item>
      <item row="1" column="1">
-      <widget class="QLineEdit" name="densityLineEdit"/>
+      <widget class="QLineEdit" name="thicknessLineEdit"/>
      </item>
      <item row="2" column="0">
       <widget class="QLabel" name="labelUnit">

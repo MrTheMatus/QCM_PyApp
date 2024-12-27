@@ -193,31 +193,38 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                         pen=Constants.plot_colors[idx])
 
             if idx == 0:  # First channel special handling
-                # Update frequency display first
-                if data['signal'] is not None and data['signal'].size > 0:
-                    current_frequency = data['signal'][-1]
-                    self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
+                # Get latest values
+                current_frequency = data['signal'][-1] if data['signal'].size > 0 else 0.0
+                current_thickness = data['thickness'][-1] if data['thickness'] is not None and data['thickness'].size > 0 else 0.0
+                
+                # Update LineEdits
+                self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
+                self.ui.thicknessLineEdit.setText(f"{current_thickness:.2f}")
+                
+                # Update LCD displays
+                self.ui.lcdNumberFreq.display(f"{current_frequency:.2f}")
+                self.ui.lcdNumberThickness.display(f"{current_thickness:.2f}")
 
                 # Frequency plot
                 self._plt_6.plot(x=time_data, y=data['signal'],
-                            pen=Constants.plot_colors[idx])
+                             pen=Constants.plot_colors[idx])
                 
                 # Frequency change plot
                 if data['frequency_change'] is not None and data['frequency_change'].size > 0:
                     self._plt_2.plot(x=time_data, y=data['frequency_change'],
-                                pen=Constants.plot_colors[idx])
+                                 pen=Constants.plot_colors[idx])
                 
                 # Thickness plot 
                 if data['thickness'] is not None and data['thickness'].size > 0:
                     self._plt_4.plot(x=time_data, y=data['thickness'],
-                                pen=Constants.plot_colors[idx])
+                                 pen=Constants.plot_colors[idx])
 
                 # Save to database if recording
                 if self.is_recording and data['signal'].size > 0:
                     self._save_to_database(
-                        data['signal'][-1],
+                        current_frequency,
                         data['frequency_change'][-1] if data['frequency_change'] is not None and data['frequency_change'].size > 0 else 0,
-                        data['thickness'][-1] if data['thickness'] is not None and data['thickness'].size > 0 else 0
+                        current_thickness
                     )
 
     def _save_to_database(self, frequency, frequency_change, frequency_rate_of_change):
