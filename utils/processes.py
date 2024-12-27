@@ -10,7 +10,7 @@ import socket
 import numpy as np
 from utils.logdecorator import log_calls, log_all_methods
 
-@log_all_methods
+#@log_all_methods
 class SerialProcess(multiprocessing.Process):
     """
     Wrapper for serial package into a multiprocessing instance.

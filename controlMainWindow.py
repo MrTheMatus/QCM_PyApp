@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 import sqlite3
 import csv
+from time import time, sleep
 
 logging.basicConfig(level=logging.INFO)
 
@@ -55,7 +56,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self._enable_ui(True)
 
         # Initialize recording state
-        self.is_recording = False
+        self.is_recording =False
         self.process_id = None
 
         # Configure record button
@@ -186,46 +187,51 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self._plt_2.clear()
         self._plt_6.clear()
 
-        # Update plots with new data
-        for idx, data in enumerate(plot_data):
+        # Debug plot data before processing
+        logging.debug(f"Plot data: {plot_data}")
+        
+        # Get first channel data
+        channel_data = plot_data[0] if isinstance(plot_data, list) else plot_data
+        
+        if channel_data['signal'] is not None and channel_data['signal'].size > 0:
             # Main plot 
-            self._plt.plot(x=time_data, y=data['signal'], 
-                        pen=Constants.plot_colors[idx])
+            self._plt.plot(x=time_data, y=channel_data['signal'], 
+                        pen=Constants.plot_colors[0])
+            
+            # Get latest values
+            current_frequency = float(channel_data['signal'][-1])
+            current_thickness = float(channel_data['thickness'][-1]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
+            logging.info(f"cur freq data: {current_frequency:.2f}")
+            logging.info(f"cur th data: {current_thickness:.2f}")
+            sleep(2)
+            # Update displays
+            self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
+            self.ui.thicknessLineEdit.setText(f"{current_thickness:.2f}")
+            self.ui.lcdNumberFreq.display(f"{current_frequency:.2f}")
+            self.ui.lcdNumberThickness.display(f"{current_thickness:.2f}")
+            
+            # Debug values
+            logging.debug(f"Updated displays - Frequency: {current_frequency:.2f}, Thickness: {current_thickness:.2f}")
+            
+            # Plot updates for first channel
+            self._plt_6.plot(x=time_data, y=channel_data['signal'],
+                         pen=Constants.plot_colors[0])
+            
+            if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0:
+                self._plt_2.plot(x=time_data, y=channel_data['frequency_change'],
+                             pen=Constants.plot_colors[0])
+            
+            if channel_data['thickness'] is not None and channel_data['thickness'].size > 0:
+                self._plt_4.plot(x=time_data, y=channel_data['thickness'],
+                             pen=Constants.plot_colors[0])
 
-            if idx == 0:  # First channel special handling
-                # Get latest values
-                current_frequency = data['signal'][-1] if data['signal'].size > 0 else 0.0
-                current_thickness = data['thickness'][-1] if data['thickness'] is not None and data['thickness'].size > 0 else 0.0
-                
-                # Update LineEdits
-                self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
-                self.ui.thicknessLineEdit.setText(f"{current_thickness:.2f}")
-                
-                # Update LCD displays
-                self.ui.lcdNumberFreq.display(f"{current_frequency:.2f}")
-                self.ui.lcdNumberThickness.display(f"{current_thickness:.2f}")
-
-                # Frequency plot
-                self._plt_6.plot(x=time_data, y=data['signal'],
-                             pen=Constants.plot_colors[idx])
-                
-                # Frequency change plot
-                if data['frequency_change'] is not None and data['frequency_change'].size > 0:
-                    self._plt_2.plot(x=time_data, y=data['frequency_change'],
-                                 pen=Constants.plot_colors[idx])
-                
-                # Thickness plot 
-                if data['thickness'] is not None and data['thickness'].size > 0:
-                    self._plt_4.plot(x=time_data, y=data['thickness'],
-                                 pen=Constants.plot_colors[idx])
-
-                # Save to database if recording
-                if self.is_recording and data['signal'].size > 0:
-                    self._save_to_database(
-                        current_frequency,
-                        data['frequency_change'][-1] if data['frequency_change'] is not None and data['frequency_change'].size > 0 else 0,
-                        current_thickness
-                    )
+            # Save to database if recording
+            if self.is_recording:
+                self._save_to_database(
+                    current_frequency,
+                    channel_data['frequency_change'][-1] if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0 else 0,
+                    current_thickness
+                )
 
     def _save_to_database(self, frequency, frequency_change, frequency_rate_of_change):
         """Save measurement to database"""
