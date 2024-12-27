@@ -203,7 +203,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             current_thickness = float(channel_data['thickness'][-1]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
             logging.info(f"cur freq data: {current_frequency:.2f}")
             logging.info(f"cur th data: {current_thickness:.2f}")
-            sleep(2)
+            #sleep(2)
             # Update displays
             self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
             self.ui.thicknessLineEdit.setText(f"{current_thickness:.2f}")
