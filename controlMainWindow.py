@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 import sqlite3
 import csv
+from time import time, sleep
 
 logging.basicConfig(level=logging.INFO)
 
@@ -55,11 +56,15 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self._enable_ui(True)
 
         # Initialize recording state
-        self.is_recording = False
+        self.is_recording =False
         self.process_id = None
 
         # Configure record button
         self.ui.recordButton.clicked.connect(self.toggle_recording)
+
+        # Initialize material handling
+        self.current_density = None
+        self._populate_material_combobox()
 
     def switch_page(self, index):
         if 0 <= index < self.ui.stackedWidget.count():
@@ -67,17 +72,19 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
                 self.load_materials()
 
-    def start(self, checked=False):
+    def start(self, checked=False, *args, **kwargs):
         """
         Starts data acquisition.
         """
         logging.info("Starting acquisition...")
+        self.current_density = self.ui.materialComboBox.currentData()
         self.worker = Worker(
             port=self.ui.cBox_Port.currentText(),
             speed=float(self.ui.cBox_Speed.currentText()),
             samples=self.ui.sBox_Samples.value(),
             source=self._get_source(),
             export_enabled=self.ui.chBox_export.isChecked(),
+            material_density=self.current_density,
         )
         self.worker.reset_buffers(self.ui.sBox_Samples.value())
         if self.worker.start():
@@ -180,39 +187,51 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self._plt_2.clear()
         self._plt_6.clear()
 
-        # Update plots with new data
-        for idx, data in enumerate(plot_data):
+        # Debug plot data before processing
+        logging.debug(f"Plot data: {plot_data}")
+        
+        # Get first channel data
+        channel_data = plot_data[0] if isinstance(plot_data, list) else plot_data
+        
+        if channel_data['signal'] is not None and channel_data['signal'].size > 0:
             # Main plot 
-            self._plt.plot(x=time_data, y=data['signal'], 
-                        pen=Constants.plot_colors[idx])
+            self._plt.plot(x=time_data, y=channel_data['signal'], 
+                        pen=Constants.plot_colors[0])
+            
+            # Get latest values
+            current_frequency = float(channel_data['signal'][-1])
+            current_thickness = float(channel_data['thickness'][-1]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
+            logging.info(f"cur freq data: {current_frequency:.2f}")
+            logging.info(f"cur th data: {current_thickness:.2f}")
+            sleep(2)
+            # Update displays
+            self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
+            self.ui.thicknessLineEdit.setText(f"{current_thickness:.2f}")
+            self.ui.lcdNumberFreq.display(f"{current_frequency:.2f}")
+            self.ui.lcdNumberThickness.display(f"{current_thickness:.2f}")
+            
+            # Debug values
+            logging.debug(f"Updated displays - Frequency: {current_frequency:.2f}, Thickness: {current_thickness:.2f}")
+            
+            # Plot updates for first channel
+            self._plt_6.plot(x=time_data, y=channel_data['signal'],
+                         pen=Constants.plot_colors[0])
+            
+            if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0:
+                self._plt_2.plot(x=time_data, y=channel_data['frequency_change'],
+                             pen=Constants.plot_colors[0])
+            
+            if channel_data['thickness'] is not None and channel_data['thickness'].size > 0:
+                self._plt_4.plot(x=time_data, y=channel_data['thickness'],
+                             pen=Constants.plot_colors[0])
 
-            if idx == 0:  # First channel special handling
-                # Update frequency display first
-                if data['signal'] is not None and data['signal'].size > 0:
-                    current_frequency = data['signal'][-1]
-                    self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
-
-                # Frequency plot
-                self._plt_6.plot(x=time_data, y=data['signal'],
-                            pen=Constants.plot_colors[idx])
-                
-                # Frequency change plot
-                if data['frequency_change'] is not None and data['frequency_change'].size > 0:
-                    self._plt_2.plot(x=time_data, y=data['frequency_change'],
-                                pen=Constants.plot_colors[idx])
-                
-                # Thickness plot 
-                if data['thickness'] is not None and data['thickness'].size > 0:
-                    self._plt_4.plot(x=time_data, y=data['thickness'],
-                                pen=Constants.plot_colors[idx])
-
-                # Save to database if recording
-                if self.is_recording and data['signal'].size > 0:
-                    self._save_to_database(
-                        data['signal'][-1],
-                        data['frequency_change'][-1] if data['frequency_change'] is not None and data['frequency_change'].size > 0 else 0,
-                        data['thickness'][-1] if data['thickness'] is not None and data['thickness'].size > 0 else 0
-                    )
+            # Save to database if recording
+            if self.is_recording:
+                self._save_to_database(
+                    current_frequency,
+                    channel_data['frequency_change'][-1] if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0 else 0,
+                    current_thickness
+                )
 
     def _save_to_database(self, frequency, frequency_change, frequency_rate_of_change):
         """Save measurement to database"""
@@ -284,6 +303,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.pButton_Stop.clicked.connect(self.stop)
         self.ui.sBox_Samples.valueChanged.connect(self._update_sample_size)
         self.ui.cBox_Source.currentIndexChanged.connect(self._source_changed)
+        self.ui.materialComboBox.currentIndexChanged.connect(self._material_changed)
 
         # Connect all navigation buttons to switch_page with corresponding page indices
         self.ui.homeButton.clicked.connect(lambda: self.switch_page(0))
@@ -332,6 +352,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             item = QListWidgetItem(f"{material['name']} ({material['density']} g/cm³)")
             item.setData(QtCore.Qt.UserRole, material['id'])
             self.ui.materialsListWidget.addItem(item)
+        self._populate_material_combobox()
         logging.info("Materials loaded successfully.")
 
 
@@ -420,3 +441,31 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             logging.error(f"Error during close: {e}")
             event.accept()
+
+    def _populate_material_combobox(self):
+        """Populate material combo box with materials from database"""
+        try:
+            self.ui.materialComboBox.clear()
+            materials = self.material_library.get_materials()
+            for material in materials:
+                self.ui.materialComboBox.addItem(
+                    f"{material['name']} ({material['density']} g/cm³)", 
+                    material['density']
+                )
+            # Set initial density
+            if self.ui.materialComboBox.count() > 0:
+                self.current_density = self.ui.materialComboBox.currentData()
+            logging.debug("Material combo box populated")
+        except Exception as e:
+            logging.error(f"Error populating material combo box: {e}")
+
+    def _material_changed(self, *args, **kwargs):
+        """Handle material change."""
+        if self.is_recording:
+            QMessageBox.warning(self, Constants.app_title, "Cannot change material during recording")
+            self.ui.materialComboBox.blockSignals(True)
+            self.ui.materialComboBox.setCurrentIndex(self.ui.materialComboBox.findData(self.current_density))
+            self.ui.materialComboBox.blockSignals(False)
+            return
+        selected_material = self.ui.materialComboBox.currentData()
+        self.current_density = selected_material

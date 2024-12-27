@@ -341,7 +341,7 @@
      </font>
     </property>
    </widget>
-   <widget class="QLineEdit" name="densityLineEdit">
+   <widget class="QLineEdit" name="thicknessLineEdit">
     <property name="geometry">
      <rect>
       <x>670</x>
