@@ -204,8 +204,8 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                         pen=Constants.plot_colors[0])
             
             # Get latest values
-            current_frequency = float(channel_data['signal'][-1])
-            current_thickness = float(channel_data['thickness'][-1]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
+            current_frequency = float(channel_data['signal'][0])
+            current_thickness = float(channel_data['thickness'][0]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
             logging.info(f"cur freq data: {current_frequency:.2f}")
             logging.info(f"cur th data: {current_thickness:.2f}")
             #sleep(2)

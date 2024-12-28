@@ -53,7 +53,7 @@ class SimulatorProcess(multiprocessing.Process):
         while not self._exit.is_set():
             stamp = time() - timestamp
             # Format data same as serial output and pass parameters separately
-            line = "{},{}\r\n".format(np.sin(coef * stamp), np.cos(coef * stamp)).encode(Constants.app_encoding)
+            line = "{},{}\r\n".format(10*np.sin(coef * stamp)+5e6, np.cos(coef * stamp)).encode(Constants.app_encoding)
             self._parser.add(stamp, line)
             sleep(self._period)
         logging.info("Process finished")
