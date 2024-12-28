@@ -1,0 +1,124 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Documentation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 90%;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Project Documentation</h1>
+
+    <h2>1. Project Restructuring</h2>
+    <p>The project was restructured to ensure modularity, maintainability, and scalability. The restructuring involved reorganizing files and introducing a more consistent structure.</p>
+
+    <h2>2. Renaming & Modularization</h2>
+    <h3>2.1. Consolidation into Modules</h3>
+    <ul>
+        <li><strong>SerialProcess, SocketProcess, and SimulatorProcess:</strong>
+            <ul>
+                <li>Previously scattered in <code>processes.py</code> or in single-file scripts.</li>
+                <li>Now located in <code>app/Serial.py</code>, <code>app/SocketClient.py</code>, and <code>app/Simulator.py</code>.</li>
+                <li>Encapsulate data acquisition logic from serial ports, sockets, and simulators, respectively.</li>
+            </ul>
+        </li>
+        <li><strong>ParserProcess & CSVProcess:</strong> Moved to <code>utils/Parser.py</code> and <code>utils/CSVProcess.py</code>.</li>
+        <li><strong>worker.py:</strong> Located in <code>app/worker.py</code>, orchestrates all processes and manages real-time data flow.</li>
+    </ul>
+
+    <h3>2.2. Database-Related Classes</h3>
+    <ul>
+        <li><code>data_handler.py</code>: Handles SQLite database operations such as setting up tables and managing logs.</li>
+        <li><code>material_library.py</code>: Provides CRUD operations for materials stored in the database.</li>
+    </ul>
+
+    <h3>2.3. Logging & Decorators</h3>
+    <p>Replaced the old <code>logger.py</code> with Python’s built-in logging module for simplicity and standardization. Introduced <code>@log_all_methods</code> and <code>@log_calls</code> decorators for automatic logging of methods.</p>
+
+    <h3>2.4. Constants & Architecture</h3>
+    <ul>
+        <li><code>utils/constants.py</code>: Stores application constants like plot update intervals, encoding, and default serial speeds.</li>
+        <li><code>utils/architecture.py</code>: Consolidates OS detection and related enumerations.</li>
+    </ul>
+
+    <h2>3. UI and Application Flow</h2>
+    <h3>3.1. Main Window & PyQt</h3>
+    <p>The UI was revamped using PyQt5. Navigation was streamlined with stacked widgets, and pages were added for database management, plots, and settings.</p>
+
+    <h3>3.2. Database Integration</h3>
+    <p>Material records can now be managed directly from the UI. The Materials page includes options to add, update, delete, or fetch records.</p>
+
+    <h2>4. SQL Schema</h2>
+    <pre><code>CREATE TABLE Material (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    density REAL NOT NULL
+);
+CREATE TABLE ProcessData (
+    id INTEGER PRIMARY KEY,
+    process_name TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    data BLOB
+);</code></pre>
+    <p><strong>Material Table:</strong> Stores material names and densities.</p>
+    <p><strong>ProcessData Table:</strong> Logs process-related data, including timestamps.</p>
+
+    <h2>5. Major Feature Highlights</h2>
+    <ul>
+        <li>Real-time plotting of frequency and thickness data.</li>
+        <li>Enhanced database management with CRUD operations for materials.</li>
+        <li>Standardized logging with Python’s <code>logging</code> module.</li>
+    </ul>
+
+    <h2>6. Deprecated or Removed Concepts</h2>
+    <ul>
+        <li>Custom <code>Logger</code> class replaced with Python’s logging module.</li>
+        <li>Monolithic scripts split into modular components.</li>
+    </ul>
+
+    <h2>7. Deployment to Raspberry Pi</h2>
+    <p>To deploy the application on a Raspberry Pi:</p>
+    <ol>
+        <li>Ensure Python 3.x is installed.</li>
+        <li>Install dependencies using <code>pip install -r requirements.txt</code>.</li>
+        <li>Run the application with <code>python main.py</code>.</li>
+    </ol>
+</body>
+</html>
