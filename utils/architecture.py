@@ -1,10 +1,10 @@
-from enum import Enum
-from pyqtgraph import AxisItem
 import sys
 import platform
 import logging
 import argparse
-from utils.logdecorator import log_calls, log_all_methods
+from enum import Enum
+from pyqtgraph import AxisItem
+from utils.logdecorator import log_all_methods
 
 @log_all_methods
 class Architecture:
@@ -21,12 +21,11 @@ class Architecture:
         tmp = str(Architecture.get_os_name())
         if "Linux" in tmp:
             return OSType.linux
-        elif "Windows" in tmp:
+        if "Windows" in tmp:
             return OSType.windows
-        elif "Darwin" in tmp:
+        if "Darwin" in tmp:
             return OSType.macosx
-        else:
-            return OSType.unknown
+        return OSType.unknown
 
     @staticmethod
     def get_os_name():
@@ -236,14 +235,3 @@ class MinimalPython:
     major = 3
     minor = 2
     release = 0
-
-##########################################
-#  Provides a non scientific axis notation
-##########################################  
-# TODO
-class NonScientificAxis(AxisItem):
-    def __init__(self, *args, **kwargs):
-        super(NonScientificAxis, self).__init__(*args, **kwargs)
-
-    def tickStrings(self, values, scale, spacing):
-        return [int(value*1) for value in values] 

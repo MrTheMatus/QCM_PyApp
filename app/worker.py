@@ -1,19 +1,17 @@
-from multiprocessing import Queue
-
-from utils.constants import Constants, SourceType
+import logging
+import time
+import numpy as np
+from utils.constants import Constants
 from utils.ringBuffer import RingBuffer
-from utils import CSVProcess
-from utils.Parser import ParserProcess
+from utils.CSVProcess import CSVProcess
 from app.Serial import SerialProcess
 from app.SocketClient import SocketProcess
 from app.Simulator import SimulatorProcess
-import logging
-from utils.logdecorator import log_calls, log_all_methods
-import numpy as np
-import time
-
-
-TAG = "Worker"
+from utils.constants import SourceType
+from utils.Parser import ParserProcess
+from utils import CSVProcess
+from utils.logdecorator import log_all_methods
+from multiprocessing import Queue
 
 @log_all_methods
 class Worker:
@@ -70,7 +68,6 @@ class Worker:
 
         if self._export:
             self._csv_process = CSVProcess(path=self._path)
-            self._db_process = DatabaseProcess(db_path=self._db_path)
             self._parser_process = ParserProcess(self._queue, store_reference=self._csv_process)
         else:
             self._parser_process = ParserProcess(self._queue)

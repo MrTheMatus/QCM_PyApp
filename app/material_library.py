@@ -1,6 +1,5 @@
 # material_library.py
 from app.data_handler import DataHandler
-from app.database_process import DatabaseProcess
 import sqlite3
 import logging
 from utils.logdecorator import log_calls, log_all_methods
