@@ -1,18 +1,17 @@
-from multiprocessing import Queue
-
-from utils.constants import Constants, SourceType
+import logging
+import time
+import numpy as np
+from utils.constants import Constants
 from utils.ringBuffer import RingBuffer
-from utils import CSVProcess
-from utils.Parser import ParserProcess
+from utils.CSVProcess import CSVProcess
 from app.Serial import SerialProcess
 from app.SocketClient import SocketProcess
 from app.Simulator import SimulatorProcess
-import logging
-from utils.logdecorator import log_calls, log_all_methods
-import numpy as np
-
-
-TAG = "Worker"
+from utils.constants import SourceType
+from utils.Parser import ParserProcess
+from utils import CSVProcess
+from utils.logdecorator import log_all_methods
+from multiprocessing import Queue
 
 @log_all_methods
 class Worker:
@@ -54,6 +53,11 @@ class Worker:
         self._path = export_path
         self._db_path = db_path  # Database path
         self.material_density = material_density
+        self._last_stored_timestamp = None
+        self._last_stored_value = None
+        self._store_threshold = 0.5  # Minimum change to store new value
+        self._last_store_time = time.time() * 1000  # milliseconds
+        self._last_stored_frequency = None
 
     def start(self):
         """
@@ -64,7 +68,6 @@ class Worker:
 
         if self._export:
             self._csv_process = CSVProcess(path=self._path)
-            self._db_process = DatabaseProcess(db_path=self._db_path)
             self._parser_process = ParserProcess(self._queue, store_reference=self._csv_process)
         else:
             self._parser_process = ParserProcess(self._queue)
@@ -98,7 +101,7 @@ class Worker:
                 process.stop()
                 process.join(Constants.process_join_timeout_ms)
 
-    def consume_queue(self):
+    def consume_queue(self, *args, **kwargs):
         """
         Empties the internal queue, updating data to consumers.
         :return:
@@ -113,19 +116,9 @@ class Worker:
             return
             
         timestamp, values = data
-        
-        if not values:
-            logging.warning("No values to store")
-            return
-            
-        # Store timestamp
-        self._time_buffer.append(timestamp)
-        
-        # Store values
+        # Store timestamp and values
+        self._time_buffer.append(timestamp) 
         self._store_signal_values(values)
-        
-        # Log for debugging
-        logging.debug(f"Stored values: {values}")
 
     def _store_signal_values(self, values):
         """Store signal values in buffers"""

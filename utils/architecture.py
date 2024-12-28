@@ -1,10 +1,10 @@
-from enum import Enum
-from pyqtgraph import AxisItem
 import sys
 import platform
 import logging
 import argparse
-from utils.logdecorator import log_calls, log_all_methods
+from enum import Enum
+from pyqtgraph import AxisItem
+from utils.logdecorator import log_all_methods
 
 @log_all_methods
 class Architecture:
@@ -21,12 +21,11 @@ class Architecture:
         tmp = str(Architecture.get_os_name())
         if "Linux" in tmp:
             return OSType.linux
-        elif "Windows" in tmp:
+        if "Windows" in tmp:
             return OSType.windows
-        elif "Darwin" in tmp:
+        if "Darwin" in tmp:
             return OSType.macosx
-        else:
-            return OSType.unknown
+        return OSType.unknown
 
     @staticmethod
     def get_os_name():
@@ -186,6 +185,9 @@ class Constants:
     app_export_path = "data"
     app_sources = ["Serial", "Simulator", "Socket Client"]
     app_encoding = "utf-8"
+    # ...existing code...
+    MIN_STORAGE_INTERVAL_MS = 200  # Minimum time between stored measurements
+    MIN_FREQUENCY_CHANGE = 0.01    # Minimum frequency change to store
 
     '''
     TODO 
@@ -193,7 +195,7 @@ class Constants:
     the QCM data rate is 1 sample/sec 
     '''
     # plot_update_ms = 16
-    plot_update_ms = 100
+    plot_update_ms = 500
     plot_xlabel_title = "Time"
     plot_xlabel_unit = "s"
     plot_colors = ['#0072bd', '#d95319', '#edb120', '#7e2f8e', '#77ac30', '#4dbeee', '#a2142f']
@@ -233,14 +235,3 @@ class MinimalPython:
     major = 3
     minor = 2
     release = 0
-
-##########################################
-#  Provides a non scientific axis notation
-##########################################  
-# TODO
-class NonScientificAxis(AxisItem):
-    def __init__(self, *args, **kwargs):
-        super(NonScientificAxis, self).__init__(*args, **kwargs)
-
-    def tickStrings(self, values, scale, spacing):
-        return [int(value*1) for value in values] 

@@ -6,11 +6,12 @@ from app.worker import Worker
 from utils.constants import Constants, SourceType
 from utils.popUp import PopUp
 from app.material_library import MaterialLibrary
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import sqlite3
 import csv
 from time import time, sleep
+from utils.constants import Constants
 
 logging.basicConfig(level=logging.INFO)
 
@@ -64,7 +65,10 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
         # Initialize material handling
         self.current_density = None
+        self.current_materialName = None
         self._populate_material_combobox()
+
+        self._last_db_insert = datetime.now()
 
     def switch_page(self, index):
         if 0 <= index < self.ui.stackedWidget.count():
@@ -78,6 +82,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         """
         logging.info("Starting acquisition...")
         self.current_density = self.ui.materialComboBox.currentData()
+        self.current_materialName = self.ui.materialComboBox.currentText()
         self.worker = Worker(
             port=self.ui.cBox_Port.currentText(),
             speed=float(self.ui.cBox_Speed.currentText()),
@@ -203,7 +208,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             current_thickness = float(channel_data['thickness'][-1]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
             logging.info(f"cur freq data: {current_frequency:.2f}")
             logging.info(f"cur th data: {current_thickness:.2f}")
-            sleep(2)
+            #sleep(2)
             # Update displays
             self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
             self.ui.thicknessLineEdit.setText(f"{current_thickness:.2f}")
@@ -233,29 +238,65 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                     current_thickness
                 )
 
-    def _save_to_database(self, frequency, frequency_change, frequency_rate_of_change):
-        """Save measurement to database"""
+    def _should_insert_to_db(self, *args, **kwargs):
+        time_diff = datetime.now() - self._last_db_insert
+        return time_diff >= timedelta(microseconds=Constants.MIN_STORAGE_INTERVAL_MS)
+
+    def _save_to_database(self, frequency, frequency_change, thickness):
+        logging.warning(
+            "_save_to_database called: freq=%.2f, freq_change=%.2f, thickness=%.2f, "
+            "is_recording=%s, process_id=%s",
+            frequency, frequency_change, thickness,
+            self.is_recording, self.process_id
+        )
+
         if not self.is_recording or self.process_id is None:
+            logging.warning("Exiting _save_to_database: is_recording=%s, process_id=%s", 
+                        self.is_recording, self.process_id)
             return
-            
+
+        if not self._should_insert_to_db():
+            logging.warning("Exiting _save_to_database: _should_insert_to_db returned False.")
+            return
+
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("""
-                INSERT INTO ProcessData 
-                (process_id, frequency, frequency_change, frequency_rate_of_change, unit, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
+            current_time = datetime.now()
+            
+            # Log just before inserting
+            logging.warning(
+                "Inserting record to DB at %s: process_id=%s, frequency=%.2f, freq_change=%.2f, "
+                "thickness=%.2f, material=%s",
+                current_time.strftime("%Y-%m-%d %H:%M:%S.%f"),
                 self.process_id,
-                float(frequency),
-                float(frequency_change),
-                float(frequency_rate_of_change),
-                'Hz',  # Default unit
-                datetime.now()  # Using created_at instead of timestamp
-            ))
+                frequency,
+                frequency_change,
+                thickness,
+                self.current_materialName
+            )
+
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO ProcessData 
+                (process_id, frequency, frequency_change, thickness, material_name, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    self.process_id,
+                    float(frequency),
+                    float(frequency_change),
+                    float(thickness),
+                    self.current_materialName,
+                    current_time
+                )
+            )
             self.conn.commit()
-            logging.debug(f"Saved data: f={frequency}, Δf={frequency_change}, df/dt={frequency_rate_of_change}")
+            self._last_db_insert = current_time
+
+            logging.warning("DB insert successful. Updated _last_db_insert to %s", current_time)
         except sqlite3.Error as e:
-            logging.error(f"Failed to save data: {e}")
+            logging.error(f"Database error: {e}")
+
 
     def _enable_ui(self, enabled):
         self.ui.cBox_Port.setEnabled(enabled)
@@ -314,7 +355,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
         self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
 
-    def _update_sample_size(self):
+    def _update_sample_size(self, *args, **kwargs):
         if self.worker:
             self.worker.reset_buffers(self.ui.sBox_Samples.value())
 
@@ -374,6 +415,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             return
 
         material_id = selected_item.data(QtCore.Qt.UserRole)
+
         name = self.ui.materialEditLineEdit.text()
         density = self.ui.densityEditLineEdit.text()
 
@@ -455,6 +497,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             # Set initial density
             if self.ui.materialComboBox.count() > 0:
                 self.current_density = self.ui.materialComboBox.currentData()
+                self.current_materialName = self.ui.materialComboBox.currentText()
             logging.debug("Material combo box populated")
         except Exception as e:
             logging.error(f"Error populating material combo box: {e}")
@@ -469,3 +512,4 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             return
         selected_material = self.ui.materialComboBox.currentData()
         self.current_density = selected_material
+        self.current_materialName = self.ui.materialComboBox.currentText()
