@@ -29,7 +29,7 @@ class Constants:
     the QCM data rate is 1 sample/sec 
     '''
     # plot_update_ms = 16
-    plot_update_ms = 100
+    plot_update_ms = 500
     plot_xlabel_title = "Time"
     plot_xlabel_unit = "s"
     plot_colors = ['#0072bd', '#d95319', '#edb120', '#7e2f8e', '#77ac30', '#4dbeee', '#a2142f']
@@ -38,6 +38,8 @@ class Constants:
     process_join_timeout_ms = 1000
 
     argument_default_samples = 500
+    MIN_STORAGE_INTERVAL_MS = 500  # Minimum time between stored measurements
+    MIN_FREQUENCY_CHANGE = 0.01    # Minimum frequency change to store
 
     serial_default_speed = 115200
     serial_timeout_ms = 0.5
