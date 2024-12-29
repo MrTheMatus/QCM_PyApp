@@ -89,6 +89,9 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         # Configure logging
         self._configure_logging()
 
+        self.edited_row_ids = set()  # Track edited rows by their IDs
+        self.load_setup_constants()
+
     def _configure_logging(self):
         """Configure logging settings and handlers."""
         self.ui.logComboBox.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
@@ -121,6 +124,8 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             self.ui.stackedWidget.setCurrentIndex(index)
             if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
                 self.load_materials()
+            if self.ui.stackedWidget.currentWidget().objectName() == "settingsPage":
+                self.load_setup_constants()
 
     def start(self, checked=False, *args, **kwargs):
         """
@@ -687,19 +692,51 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
 
     def delete_setup_row(self, *args, **kwargs):
-        """Delete the selected row."""
+        """Mark the selected row for deletion but defer database changes until commit."""
         model = self.ui.settingsTableView.model()
+        if not model:
+            logging.error("No model found for settingsTableView.")
+            return
+
+        # Get the selected rows
         selected_rows = self.ui.settingsTableView.selectionModel().selectedRows()
+        if not selected_rows:
+            logging.warning("No rows selected for deletion.")
+            return
+
         for row in selected_rows:
+            row_id_item = model.item(row.row(), 0)  # ID column
+            if row_id_item:
+                row_id = row_id_item.text()
+                if row_id.isdigit():
+                    # Add ID to a deferred deletion list
+                    if not hasattr(self, "deferred_deletions"):
+                        self.deferred_deletions = []
+                    self.deferred_deletions.append(int(row_id))
+                    logging.info(f"Row with ID {row_id} marked for deletion.")
+
+            # Remove the row from the model
             model.removeRow(row.row())
 
+        logging.info("Selected rows deleted from the view. Commit to apply changes.")
+
+
     def commit_changes(self, *args, **kwargs):
+        """Commit changes from the table to the database."""
         logging.info("Committing changes...")
         model = self.ui.settingsTableView.model()
         if not model:
             logging.error("No model found for settingsTableView.")
             return
 
+        # Handle deletions first
+        if hasattr(self, "deferred_deletions") and self.deferred_deletions:
+            for setup_id in self.deferred_deletions:
+                self.setup_library.delete_setup(setup_id)
+                logging.info(f"Deferred deletion committed for setup ID {setup_id}.")
+            self.deferred_deletions.clear()
+
+        # Process remaining rows for updates or inserts
         for row in range(model.rowCount()):
             id_item = model.item(row, 0)  # Column 0 is the ID
             quartz_density = model.item(row, 1).text()
@@ -721,8 +758,8 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
                 # Update the model with the new ID
                 id_item.setText(str(new_id))
-            else:
-                # Handle existing row (UPDATE)
+            elif int(id_item.text()) in self.edited_row_ids:
+                # Handle existing row (UPDATE) only if its ID is in the edited_row_ids set
                 self.setup_library.update_setup(
                     id_item.text(),
                     quartz_density,
@@ -731,20 +768,54 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                     tooling_factor,
                     description
                 )
+                logging.info(f"Row with ID {id_item.text()} updated in database.")
+
+        # Clear the edited rows set
+        self.edited_row_ids.clear()
 
         # Reload the table after commit
         self.load_setup_constants()
 
 
-
     def rollback_changes(self, *args, **kwargs):
         """Reload setups from the database, discarding unsaved changes."""
         self.load_setup_constants()
-        logging.info("Changes rolled back.")
+
+        # Clear the deferred deletions list
+        if hasattr(self, "deferred_deletions"):
+            self.deferred_deletions.clear()
+
+        logging.info("Changes rolled back. All deletions and edits discarded.")
 
     def update_setup_row(self, *args, **kwargs):
         """Enable editing for the selected row."""
-        self.ui.settingsTableView.setEditTriggers(QtWidgets.QAbstractItemView.AllEditTriggers)
+        model = self.ui.settingsTableView.model()
+        if not model:
+            logging.error("No model found for settingsTableView.")
+            return
+
+        # Enable editing for the selected rows
+        selected_rows = self.ui.settingsTableView.selectionModel().selectedRows()
+
+        if not selected_rows:
+            logging.warning("No rows selected for editing.")
+            return
+
+        for row in selected_rows:
+            row_id_item = model.item(row.row(), 0)  # Column 0 is the ID
+            if row_id_item and row_id_item.text().isdigit():
+                row_id = int(row_id_item.text())
+                self.edited_row_ids.add(row_id)  # Track the row ID for updates
+                logging.info(f"Row with ID {row_id} enabled for editing.")
+
+            # Enable editing for all columns in the selected row
+            for col in range(model.columnCount()):
+                item = model.item(row.row(), col)
+                if item:
+                    item.setEditable(True)
+
+        logging.info("Selected rows are now editable.")
+
 
     def get_setup_constants(self, row_id, *args, **kwargs):
         """Get setup constants for the given row ID."""
