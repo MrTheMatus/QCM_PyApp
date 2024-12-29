@@ -12,8 +12,11 @@ import sqlite3
 import csv
 from time import time, sleep
 from utils.constants import Constants
-
-logging.basicConfig(level=logging.INFO)
+from PyQt5 import QtCore, QtGui, QtWidgets
+import webbrowser
+from utils.architecture import Architecture
+from logging.handlers import TimedRotatingFileHandler
+import os
 
 def log_calls(func):
     def wrapper(*args, **kwargs):
@@ -26,6 +29,15 @@ def log_all_methods(cls):
         if callable(attr_value) and not attr_name.startswith("__"):
             setattr(cls, attr_name, log_calls(attr_value))
     return cls
+
+class LogHandler(logging.Handler):
+    def __init__(self, line_edit):
+        super().__init__()
+        self.line_edit = line_edit
+
+    def emit(self, record):
+        log_entry = self.format(record)
+        self.line_edit.setText(log_entry)
 
 @log_all_methods
 class ControlMainWindow(QtWidgets.QMainWindow):
@@ -57,7 +69,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self._enable_ui(True)
 
         # Initialize recording state
-        self.is_recording =False
+        self.is_recording = False
         self.process_id = None
 
         # Configure record button
@@ -69,6 +81,36 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self._populate_material_combobox()
 
         self._last_db_insert = datetime.now()
+
+        # Configure logging
+        self._configure_logging()
+
+    def _configure_logging(self):
+        """Configure logging settings and handlers."""
+        self.ui.logComboBox.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        self.ui.logComboBox.currentIndexChanged.connect(self._set_logging_level)
+        self._set_logging_level()
+
+        # Ensure the log directory exists
+        log_dir = "./logs"
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+
+        # Configure TimedRotatingFileHandler
+        current_date = datetime.now().strftime("%Y_%m_%d")  # Format the current date
+        log_handler = TimedRotatingFileHandler(
+        os.path.join(log_dir, f"log_{current_date}.txt"), 
+        when="midnight", 
+        interval=1, 
+        backupCount=7)
+        log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        logging.getLogger().addHandler(log_handler)
+
+    def _set_logging_level(self, *args, **kwargs):
+        """Set the logging level based on the combo box selection."""
+        level = self.ui.logComboBox.currentText()
+        logging.getLogger().setLevel(getattr(logging, level))
+        logging.info(f"Logging level set to {level}")
 
     def switch_page(self, index):
         if 0 <= index < self.ui.stackedWidget.count():
@@ -113,6 +155,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                 self.stop_recording()
                 self.ui.recordButton.setText("Start Recording")
                 self.is_recording = False
+                self.switch_record_button_icon(self.is_recording)
         except Exception as e:
             logging.error(f"Error during stop: {e}")
 
@@ -133,6 +176,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                 self.ui.recordButton.setText("Start Recording")
                 
             self.is_recording = not self.is_recording
+            self.switch_record_button_icon(self.is_recording)
             
         except Exception as e:
             logging.error(f"Recording toggle failed: {e}")
@@ -145,11 +189,15 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         try:
             if not self.conn:
                 self.conn = self._initialize_db_connection()
+        
+            process_name = self.ui.processNameLineEdit.text().strip()
+            if not process_name:
+                process_name = 'Unnamed_process'
                 
             cursor = self.conn.cursor()
             cursor.execute(
                 "INSERT INTO Process (process_name, start_time) VALUES (?, ?)",
-                ("Recording", datetime.now())
+                (process_name, datetime.now())
             )
             self.process_id = cursor.lastrowid
             self.conn.commit()
@@ -204,8 +252,8 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                         pen=Constants.plot_colors[0])
             
             # Get latest values
-            current_frequency = float(channel_data['signal'][-1])
-            current_thickness = float(channel_data['thickness'][-1]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
+            current_frequency = float(channel_data['signal'][0])
+            current_thickness = float(channel_data['thickness'][0]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
             logging.info(f"cur freq data: {current_frequency:.2f}")
             logging.info(f"cur th data: {current_thickness:.2f}")
             #sleep(2)
@@ -261,7 +309,6 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
         try:
             current_time = datetime.now()
-            
             # Log just before inserting
             logging.warning(
                 "Inserting record to DB at %s: process_id=%s, frequency=%.2f, freq_change=%.2f, "
@@ -348,12 +395,12 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
         # Connect all navigation buttons to switch_page with corresponding page indices
         self.ui.homeButton.clicked.connect(lambda: self.switch_page(0))
-        self.ui.databaseButton.clicked.connect(lambda: self.switch_page(2))
-        self.ui.plotsButton.clicked.connect(lambda: self.switch_page(3))
-        self.ui.connectionButton.clicked.connect(lambda: self.switch_page(4))
-        self.ui.settingsButton.clicked.connect(lambda: self.switch_page(5))
-        self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
-        self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
+        self.ui.connectionButton.clicked.connect(lambda: self.switch_page(1))
+        self.ui.plotsButton.clicked.connect(lambda: self.switch_page(2))
+        self.ui.databaseButton.clicked.connect(lambda: self.switch_page(3))
+        self.ui.settingsButton.clicked.connect(lambda: self.switch_page(4))
+        self.ui.infoButton.clicked.connect(lambda: self.switch_page(5))
+        self.ui.helpButton.clicked.connect(self.open_help_documentation)
 
     def _update_sample_size(self, *args, **kwargs):
         if self.worker:
@@ -513,3 +560,24 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         selected_material = self.ui.materialComboBox.currentData()
         self.current_density = selected_material
         self.current_materialName = self.ui.materialComboBox.currentText()
+
+    def switch_record_button_icon(self, is_recording):
+        """Switch the icon of the record button based on the recording state."""
+        icon = QtGui.QIcon()
+        if is_recording:
+            icon.addPixmap(QtGui.QPixmap(".\\ui\\../images/stop-button.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        else:
+            icon.addPixmap(QtGui.QPixmap(".\\ui\\../images/play.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        self.ui.recordButton.setIcon(icon)
+
+    def open_help_documentation(self, *args, **kwargs):
+        """Opens the project documentation."""
+        doc_path = "docs/Project_Documentation.html"
+        base_path = Architecture.get_path()
+        full_path = f"{base_path}/{doc_path}"
+        try:
+            webbrowser.open(full_path)
+            logging.info(f"Opened documentation: {full_path}")
+        except Exception as e:
+            logging.error(f"Failed to open documentation: {e}")
+            QMessageBox.warning(self, "Error", f"Cannot open documentation: {e}")

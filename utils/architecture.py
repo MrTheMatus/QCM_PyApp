@@ -173,7 +173,6 @@ class SourceType(Enum):
     """
     simulator = 1
     serial = 0
-    SocketClient = 2
 
 
 class Constants:
@@ -183,7 +182,7 @@ class Constants:
     app_title = "RTGraph-openQCM"
     app_version = '0.1'
     app_export_path = "data"
-    app_sources = ["Serial", "Simulator", "Socket Client"]
+    app_sources = ["Serial", "Simulator"]
     app_encoding = "utf-8"
     # ...existing code...
     MIN_STORAGE_INTERVAL_MS = 200  # Minimum time between stored measurements
@@ -207,13 +206,6 @@ class Constants:
 
     serial_default_speed = 115200
     serial_timeout_ms = 0.5
-
-    class SocketClient:
-        timeout = 0.01
-        host_default = "localhost"
-        port_default = [5555, 8080, 9090]
-        buffer_recv_size = 1024
-
     simulator_default_speed = 0.002
 
     csv_default_filename = "%Y-%m-%d_%H-%M-%S"

@@ -52,11 +52,11 @@
     <h2>2. Renaming & Modularization</h2>
     <h3>2.1. Consolidation into Modules</h3>
     <ul>
-        <li><strong>SerialProcess, SocketProcess, and SimulatorProcess:</strong>
+        <li><strong>SerialProcess, and SimulatorProcess:</strong>
             <ul>
                 <li>Previously scattered in <code>processes.py</code> or in single-file scripts.</li>
-                <li>Now located in <code>app/Serial.py</code>, <code>app/SocketClient.py</code>, and <code>app/Simulator.py</code>.</li>
-                <li>Encapsulate data acquisition logic from serial ports, sockets, and simulators, respectively.</li>
+                <li>Now located in <code>app/Serial.py</code>, and <code>app/Simulator.py</code>.</li>
+                <li>Encapsulate data acquisition logic from serial ports, and simulators, respectively.</li>
             </ul>
         </li>
         <li><strong>ParserProcess & CSVProcess:</strong> Moved to <code>utils/Parser.py</code> and <code>utils/CSVProcess.py</code>.</li>

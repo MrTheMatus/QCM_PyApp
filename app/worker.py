@@ -5,7 +5,6 @@ from utils.constants import Constants
 from utils.ringBuffer import RingBuffer
 from utils.CSVProcess import CSVProcess
 from app.Serial import SerialProcess
-from app.SocketClient import SocketProcess
 from app.Simulator import SimulatorProcess
 from utils.constants import SourceType
 from utils.Parser import ParserProcess
@@ -76,8 +75,7 @@ class Worker:
             self._acquisition_process = SerialProcess(self._parser_process)
         elif self._source == SourceType.simulator:
             self._acquisition_process = SimulatorProcess(self._parser_process)
-        elif self._source == SourceType.SocketClient:
-            self._acquisition_process = SocketProcess(self._parser_process)
+
 
         if self._acquisition_process.open(port=self._port, speed=self._speed):
             if self._export:
@@ -176,8 +174,6 @@ class Worker:
             return SerialProcess.get_ports()
         elif source == SourceType.simulator:
             return SimulatorProcess.get_ports()
-        elif source == SourceType.SocketClient:
-            return SocketProcess.get_default_host()
         else:
             logging.warning(  "Unknown source selected")
             return None
@@ -195,8 +191,6 @@ class Worker:
             return SerialProcess.get_speeds()
         elif source == SourceType.simulator:
             return SimulatorProcess.get_speeds()
-        elif source == SourceType.SocketClient:
-            return SocketProcess.get_default_port()
         else:
             logging.warning(  "Unknown source selected")
             return None
