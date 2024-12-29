@@ -1,7 +1,5 @@
 import logging
 
-logging.basicConfig(level=logging.INFO)
-
 def log_calls(func):
     """Decorator that logs function calls."""
     def wrapper(*args, **kwargs):

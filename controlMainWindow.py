@@ -15,8 +15,8 @@ from utils.constants import Constants
 from PyQt5 import QtCore, QtGui, QtWidgets
 import webbrowser
 from utils.architecture import Architecture
-
-logging.basicConfig(level=logging.INFO)
+from logging.handlers import TimedRotatingFileHandler
+import os
 
 def log_calls(func):
     def wrapper(*args, **kwargs):
@@ -29,6 +29,15 @@ def log_all_methods(cls):
         if callable(attr_value) and not attr_name.startswith("__"):
             setattr(cls, attr_name, log_calls(attr_value))
     return cls
+
+class LogHandler(logging.Handler):
+    def __init__(self, line_edit):
+        super().__init__()
+        self.line_edit = line_edit
+
+    def emit(self, record):
+        log_entry = self.format(record)
+        self.line_edit.setText(log_entry)
 
 @log_all_methods
 class ControlMainWindow(QtWidgets.QMainWindow):
@@ -72,6 +81,36 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self._populate_material_combobox()
 
         self._last_db_insert = datetime.now()
+
+        # Configure logging
+        self._configure_logging()
+
+    def _configure_logging(self):
+        """Configure logging settings and handlers."""
+        self.ui.logComboBox.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        self.ui.logComboBox.currentIndexChanged.connect(self._set_logging_level)
+        self._set_logging_level()
+
+        # Ensure the log directory exists
+        log_dir = "./logs"
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+
+        # Configure TimedRotatingFileHandler
+        current_date = datetime.now().strftime("%Y_%m_%d")  # Format the current date
+        log_handler = TimedRotatingFileHandler(
+        os.path.join(log_dir, f"log_{current_date}.txt"), 
+        when="midnight", 
+        interval=1, 
+        backupCount=7)
+        log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        logging.getLogger().addHandler(log_handler)
+
+    def _set_logging_level(self, *args, **kwargs):
+        """Set the logging level based on the combo box selection."""
+        level = self.ui.logComboBox.currentText()
+        logging.getLogger().setLevel(getattr(logging, level))
+        logging.info(f"Logging level set to {level}")
 
     def switch_page(self, index):
         if 0 <= index < self.ui.stackedWidget.count():

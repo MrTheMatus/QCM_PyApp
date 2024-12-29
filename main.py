@@ -4,13 +4,6 @@ from controlMainWindow import ControlMainWindow
 import logging
 import atexit
 
-logging.basicConfig(
-    filename="log.txt",
-    filemode="a",
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-
 logging.info("Logging test - INFO level")
 logging.debug("Logging test - DEBUG level")
 print("Logging test executed")
