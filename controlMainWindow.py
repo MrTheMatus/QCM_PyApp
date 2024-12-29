@@ -12,6 +12,9 @@ import sqlite3
 import csv
 from time import time, sleep
 from utils.constants import Constants
+from PyQt5 import QtCore, QtGui, QtWidgets
+import webbrowser
+from utils.architecture import Architecture
 
 logging.basicConfig(level=logging.INFO)
 
@@ -112,6 +115,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             if self.is_recording:
                 self.stop_recording()
                 self.ui.recordButton.setText("Start Recording")
+                self.ui.recordButton.setIcon(icon=QIcon(":/icons/record.png"))
                 self.is_recording = False
         except Exception as e:
             logging.error(f"Error during stop: {e}")
@@ -133,6 +137,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                 self.ui.recordButton.setText("Start Recording")
                 
             self.is_recording = not self.is_recording
+            self.switch_record_button_icon(self.is_recording)
             
         except Exception as e:
             logging.error(f"Recording toggle failed: {e}")
@@ -348,12 +353,12 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
         # Connect all navigation buttons to switch_page with corresponding page indices
         self.ui.homeButton.clicked.connect(lambda: self.switch_page(0))
-        self.ui.databaseButton.clicked.connect(lambda: self.switch_page(2))
-        self.ui.plotsButton.clicked.connect(lambda: self.switch_page(3))
-        self.ui.connectionButton.clicked.connect(lambda: self.switch_page(4))
-        self.ui.settingsButton.clicked.connect(lambda: self.switch_page(5))
-        self.ui.helpButton.clicked.connect(lambda: self.switch_page(6))
-        self.ui.infoButton.clicked.connect(lambda: self.switch_page(7))
+        self.ui.connectionButton.clicked.connect(lambda: self.switch_page(1))
+        self.ui.plotsButton.clicked.connect(lambda: self.switch_page(2))
+        self.ui.databaseButton.clicked.connect(lambda: self.switch_page(3))
+        self.ui.settingsButton.clicked.connect(lambda: self.switch_page(4))
+        self.ui.infoButton.clicked.connect(lambda: self.switch_page(5))
+        self.ui.helpButton.clicked.connect(self.open_help_documentation)
 
     def _update_sample_size(self, *args, **kwargs):
         if self.worker:
@@ -513,3 +518,24 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         selected_material = self.ui.materialComboBox.currentData()
         self.current_density = selected_material
         self.current_materialName = self.ui.materialComboBox.currentText()
+
+    def switch_record_button_icon(self, is_recording):
+        """Switch the icon of the record button based on the recording state."""
+        icon = QtGui.QIcon()
+        if is_recording:
+            icon.addPixmap(QtGui.QPixmap(".\\ui\\../images/stop-button.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        else:
+            icon.addPixmap(QtGui.QPixmap(".\\ui\\../images/play.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        self.ui.recordButton.setIcon(icon)
+
+    def open_help_documentation(self, *args, **kwargs):
+        """Opens the project documentation."""
+        doc_path = "docs/Project_Documentation.html"
+        base_path = Architecture.get_path()
+        full_path = f"{base_path}/{doc_path}"
+        try:
+            webbrowser.open(full_path)
+            logging.info(f"Opened documentation: {full_path}")
+        except Exception as e:
+            logging.error(f"Failed to open documentation: {e}")
+            QMessageBox.warning(self, "Error", f"Cannot open documentation: {e}")

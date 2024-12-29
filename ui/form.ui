@@ -254,7 +254,7 @@
      </font>
     </property>
     <property name="currentIndex">
-     <number>1</number>
+     <number>4</number>
     </property>
     <widget class="QWidget" name="homePage">
      <widget class="QLabel" name="thicknessLabel">
@@ -320,6 +320,230 @@
       <property name="digitCount">
        <number>7</number>
       </property>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="connectPage">
+     <widget class="QWidget" name="RTGraphWidget" native="true">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>170</y>
+        <width>781</width>
+        <height>191</height>
+       </rect>
+      </property>
+      <layout class="QGridLayout" name="Layout_controls">
+       <item row="1" column="3">
+        <widget class="QPushButton" name="pButton_Stop">
+         <property name="text">
+          <string>Stop</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="cBox_Port">
+         <property name="editable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <widget class="QComboBox" name="cBox_Source"/>
+       </item>
+       <item row="0" column="3">
+        <widget class="QPushButton" name="pButton_Start">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>Start</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QComboBox" name="cBox_Speed">
+         <property name="editable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="2">
+        <widget class="QSpinBox" name="sBox_Samples">
+         <property name="suffix">
+          <string> samples</string>
+         </property>
+         <property name="prefix">
+          <string>Show </string>
+         </property>
+         <property name="minimum">
+          <number>1</number>
+         </property>
+         <property name="maximum">
+          <number>100000</number>
+         </property>
+         <property name="value">
+          <number>500</number>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="GraphicsLayoutWidget" name="plt">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>10</y>
+        <width>1000</width>
+        <height>200</height>
+       </rect>
+      </property>
+      <property name="autoFillBackground">
+       <bool>false</bool>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">border: 0px;</string>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::StyledPanel</enum>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Plain</enum>
+      </property>
+      <property name="lineWidth">
+       <number>0</number>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="chBox_export">
+      <property name="enabled">
+       <bool>true</bool>
+      </property>
+      <property name="geometry">
+       <rect>
+        <x>430</x>
+        <y>110</y>
+        <width>186</width>
+        <height>28</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Export to CSV</string>
+      </property>
+     </widget>
+     <zorder>chBox_export</zorder>
+     <zorder>RTGraphWidget</zorder>
+     <zorder>plt</zorder>
+    </widget>
+    <widget class="QWidget" name="plotPage">
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>1001</width>
+        <height>361</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="thicknessTab">
+       <attribute name="title">
+        <string>Thickness</string>
+       </attribute>
+       <widget class="GraphicsLayoutWidget" name="plt_4_thickness">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>1000</width>
+          <height>321</height>
+         </rect>
+        </property>
+        <property name="autoFillBackground">
+         <bool>false</bool>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">border: 0px;</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Plain</enum>
+        </property>
+        <property name="lineWidth">
+         <number>0</number>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QWidget" name="freqTab">
+       <attribute name="title">
+        <string>Absolute frequency</string>
+       </attribute>
+       <widget class="GraphicsLayoutWidget" name="plt6_Freq">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>1000</width>
+          <height>321</height>
+         </rect>
+        </property>
+        <property name="autoFillBackground">
+         <bool>false</bool>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">border: 0px;</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Plain</enum>
+        </property>
+        <property name="lineWidth">
+         <number>0</number>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QWidget" name="freqChangeTab">
+       <attribute name="title">
+        <string>Frequency change</string>
+       </attribute>
+       <widget class="GraphicsLayoutWidget" name="plt_2_changeFreq">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>1000</width>
+          <height>321</height>
+         </rect>
+        </property>
+        <property name="autoFillBackground">
+         <bool>false</bool>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">border: 0px;</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Plain</enum>
+        </property>
+        <property name="lineWidth">
+         <number>0</number>
+        </property>
+       </widget>
+      </widget>
      </widget>
     </widget>
     <widget class="QWidget" name="materialsPage">
@@ -742,230 +966,6 @@
        </widget>
       </widget>
      </widget>
-    </widget>
-    <widget class="QWidget" name="plotPage">
-     <widget class="QTabWidget" name="tabWidget">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>1001</width>
-        <height>361</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>12</pointsize>
-       </font>
-      </property>
-      <property name="currentIndex">
-       <number>0</number>
-      </property>
-      <widget class="QWidget" name="thicknessTab">
-       <attribute name="title">
-        <string>Thickness</string>
-       </attribute>
-       <widget class="GraphicsLayoutWidget" name="plt_4_thickness">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>1000</width>
-          <height>321</height>
-         </rect>
-        </property>
-        <property name="autoFillBackground">
-         <bool>false</bool>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">border: 0px;</string>
-        </property>
-        <property name="frameShape">
-         <enum>QFrame::StyledPanel</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Plain</enum>
-        </property>
-        <property name="lineWidth">
-         <number>0</number>
-        </property>
-       </widget>
-      </widget>
-      <widget class="QWidget" name="freqTab">
-       <attribute name="title">
-        <string>Absolute frequency</string>
-       </attribute>
-       <widget class="GraphicsLayoutWidget" name="plt6_Freq">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>1000</width>
-          <height>321</height>
-         </rect>
-        </property>
-        <property name="autoFillBackground">
-         <bool>false</bool>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">border: 0px;</string>
-        </property>
-        <property name="frameShape">
-         <enum>QFrame::StyledPanel</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Plain</enum>
-        </property>
-        <property name="lineWidth">
-         <number>0</number>
-        </property>
-       </widget>
-      </widget>
-      <widget class="QWidget" name="freqChangeTab">
-       <attribute name="title">
-        <string>Frequency change</string>
-       </attribute>
-       <widget class="GraphicsLayoutWidget" name="plt_2_changeFreq">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>1000</width>
-          <height>321</height>
-         </rect>
-        </property>
-        <property name="autoFillBackground">
-         <bool>false</bool>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">border: 0px;</string>
-        </property>
-        <property name="frameShape">
-         <enum>QFrame::StyledPanel</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Plain</enum>
-        </property>
-        <property name="lineWidth">
-         <number>0</number>
-        </property>
-       </widget>
-      </widget>
-     </widget>
-    </widget>
-    <widget class="QWidget" name="connectPage">
-     <widget class="QWidget" name="RTGraphWidget" native="true">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>170</y>
-        <width>781</width>
-        <height>191</height>
-       </rect>
-      </property>
-      <layout class="QGridLayout" name="Layout_controls">
-       <item row="1" column="3">
-        <widget class="QPushButton" name="pButton_Stop">
-         <property name="text">
-          <string>Stop</string>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="1">
-        <widget class="QComboBox" name="cBox_Port">
-         <property name="editable">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="0">
-        <widget class="QComboBox" name="cBox_Source"/>
-       </item>
-       <item row="0" column="3">
-        <widget class="QPushButton" name="pButton_Start">
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>0</height>
-          </size>
-         </property>
-         <property name="text">
-          <string>Start</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QComboBox" name="cBox_Speed">
-         <property name="editable">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="2">
-        <widget class="QSpinBox" name="sBox_Samples">
-         <property name="suffix">
-          <string> samples</string>
-         </property>
-         <property name="prefix">
-          <string>Show </string>
-         </property>
-         <property name="minimum">
-          <number>1</number>
-         </property>
-         <property name="maximum">
-          <number>100000</number>
-         </property>
-         <property name="value">
-          <number>500</number>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-     <widget class="GraphicsLayoutWidget" name="plt">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>10</y>
-        <width>1000</width>
-        <height>200</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">border: 0px;</string>
-      </property>
-      <property name="frameShape">
-       <enum>QFrame::StyledPanel</enum>
-      </property>
-      <property name="frameShadow">
-       <enum>QFrame::Plain</enum>
-      </property>
-      <property name="lineWidth">
-       <number>0</number>
-      </property>
-     </widget>
-     <widget class="QCheckBox" name="chBox_export">
-      <property name="enabled">
-       <bool>true</bool>
-      </property>
-      <property name="geometry">
-       <rect>
-        <x>430</x>
-        <y>110</y>
-        <width>186</width>
-        <height>28</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Export to CSV</string>
-      </property>
-     </widget>
-     <zorder>chBox_export</zorder>
-     <zorder>RTGraphWidget</zorder>
-     <zorder>plt</zorder>
     </widget>
     <widget class="QWidget" name="settingsPage">
      <widget class="QWidget" name="verticalLayoutWidget_2">
