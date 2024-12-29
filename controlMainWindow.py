@@ -60,7 +60,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self._enable_ui(True)
 
         # Initialize recording state
-        self.is_recording =False
+        self.is_recording = False
         self.process_id = None
 
         # Configure record button
@@ -115,8 +115,8 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             if self.is_recording:
                 self.stop_recording()
                 self.ui.recordButton.setText("Start Recording")
-                self.ui.recordButton.setIcon(icon=QIcon(":/icons/record.png"))
                 self.is_recording = False
+                self.switch_record_button_icon(self.is_recording)
         except Exception as e:
             logging.error(f"Error during stop: {e}")
 
@@ -150,11 +150,15 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         try:
             if not self.conn:
                 self.conn = self._initialize_db_connection()
+        
+            process_name = self.ui.processNameLineEdit.text().strip()
+            if not process_name:
+                process_name = 'Unnamed_process'
                 
             cursor = self.conn.cursor()
             cursor.execute(
                 "INSERT INTO Process (process_name, start_time) VALUES (?, ?)",
-                ("Recording", datetime.now())
+                (process_name, datetime.now())
             )
             self.process_id = cursor.lastrowid
             self.conn.commit()
@@ -266,7 +270,6 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
         try:
             current_time = datetime.now()
-            
             # Log just before inserting
             logging.warning(
                 "Inserting record to DB at %s: process_id=%s, frequency=%.2f, freq_change=%.2f, "
