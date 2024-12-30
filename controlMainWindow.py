@@ -19,6 +19,7 @@ from utils.architecture import Architecture
 from logging.handlers import TimedRotatingFileHandler
 import os
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from app.crystal_export import CrystalExport
 
 
 def log_calls(func):
@@ -91,6 +92,11 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
         self.edited_row_ids = set()  # Track edited rows by their IDs
         self.load_setup_constants()
+
+        self.crystal_export = CrystalExport(db_path=self.db_path)  # Initialize CrystalExport
+        #self.ui.fetchButton_2.clicked.connect(self.fetch_plot_data)  # Fetch Plot button
+        self.ui.exportButton.clicked.connect(self.export_data)  # Export button
+
 
     def _configure_logging(self):
         """Configure logging settings and handlers."""
@@ -844,9 +850,33 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             tooling_factor = setup_constants["tooling_factor"]
             return (density * modulus / area) * tooling_factor
         return None
+    
+    def export_data(self, *args, **kwargs):
+        from_timestamp = self.ui.fromdateTimeEdit.dateTime().toPyDateTime()
+        to_timestamp = self.ui.todateTimeEdit.dateTime().toPyDateTime()
+        process_id = self.ui.processidLineEdit.text()
+        material = self.ui.materialComboBox.currentText() if self.ui.materialcheckBox.isChecked() else None
 
+        # Handle default null timestamps
+        from_timestamp = None if from_timestamp == datetime(2000, 1, 1) else from_timestamp
+        to_timestamp = None if to_timestamp == datetime(2000, 1, 1) else to_timestamp
 
+        # Fetch data based on filters
+        data = self.crystal_export.fetch_data(
+            process_id=process_id, 
+            material=material, 
+            from_timestamp=from_timestamp, 
+            to_timestamp=to_timestamp
+        )
 
+        # Map process IDs to names
+        process_names = {row["process_id"]: row["process_name"] for row in data}
 
-
+        # Export based on checkboxes
+        if self.ui.pngcheckBox.isChecked():
+            self.crystal_export.export_to_plot(data, process_names, "exports/plots")
+        if self.ui.csvcheckBox.isChecked():
+            self.crystal_export.export_to_csv(data, "exports/csv")
+        if self.ui.jsoncheckBox.isChecked():
+            self.crystal_export.export_to_json(data, "exports/json")
 
