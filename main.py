@@ -3,6 +3,7 @@ from PyQt5 import QtWidgets
 from controlMainWindow import ControlMainWindow
 import logging
 import atexit
+from PyQt5.QtCore import Qt
 
 logging.info("Logging test - INFO level")
 logging.debug("Logging test - DEBUG level")
@@ -42,6 +43,8 @@ if __name__ == "__main__":
 
     logging.info("Initializing QApplication")
     app = QtWidgets.QApplication(sys.argv)
+    app.setAttribute(Qt.AA_SynthesizeTouchForUnhandledMouseEvents, True)
+    app.setAttribute(Qt.AA_SynthesizeMouseForUnhandledTouchEvents, True)
 
     logging.info("Initializing ControlMainWindow")
     window = ControlMainWindow()
