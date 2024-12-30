@@ -254,7 +254,7 @@
      </font>
     </property>
     <property name="currentIndex">
-     <number>3</number>
+     <number>0</number>
     </property>
     <widget class="QWidget" name="homePage">
      <widget class="QLabel" name="thicknessLabel">
@@ -1074,7 +1074,7 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLabel" name="processNameLabel">
     <property name="geometry">
      <rect>
-      <x>380</x>
+      <x>370</x>
       <y>450</y>
       <width>131</width>
       <height>22</height>
@@ -1108,7 +1108,7 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLabel" name="logLabel">
     <property name="geometry">
      <rect>
-      <x>380</x>
+      <x>370</x>
       <y>500</y>
       <width>121</width>
       <height>22</height>
@@ -1271,7 +1271,7 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLineEdit" name="frequencyROCLineEdit">
     <property name="geometry">
      <rect>
-      <x>21</x>
+      <x>160</x>
       <y>31</y>
       <width>125</width>
       <height>29</height>
@@ -1316,7 +1316,7 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLineEdit" name="thicknessLineEdit">
     <property name="geometry">
      <rect>
-      <x>160</x>
+      <x>750</x>
       <y>31</y>
       <width>125</width>
       <height>29</height>
@@ -1337,7 +1337,7 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLineEdit" name="frequencyLineEdit">
     <property name="geometry">
      <rect>
-      <x>750</x>
+      <x>20</x>
       <y>31</y>
       <width>125</width>
       <height>29</height>

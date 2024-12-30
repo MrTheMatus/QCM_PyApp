@@ -17,27 +17,17 @@ class Worker:
     """
     Concentrates all workers (processes) to run the application.
     """
+class Worker:
+    """
+    Concentrates all workers (processes) to run the application.
+    """
     def __init__(self, port=None, speed=Constants.serial_default_speed, samples=Constants.argument_default_samples,
                  source=SourceType.serial, export_enabled=False, export_path=Constants.app_export_path, db_path="deploy/db/database.db", material_density=None):
-        """
-        Creates and orchestrates all processes involved in data acquisition, processing and storing.
-        :param port: Port to open on start.
-        :type port: str.
-        :param speed: Speed for the specified port (depending on source).
-        :type speed: float.
-        :param samples: Number of samples to keep in the buffers (should match with plot samples).
-        :type samples: int.
-        :param source: Source type where data should be obtained
-        :type source: SourceType.
-        :param export_enabled: If true, data will be stored or exported in a file.
-        :type export_enabled: bool.
-        :param export_path: If specified, defines where the data will be exported.
-        :type export_path: str.
-        """
         self._queue = Queue()
         self._data_buffers = None
         self._time_buffer = None
         self._lines = 0
+        self.first_entry = None  # Single first entry for all channels
 
         self._acquisition_process = None
         self._parser_process = None
@@ -52,18 +42,13 @@ class Worker:
         self._path = export_path
         self._db_path = db_path  # Database path
         self.material_density = material_density
-        self._last_stored_timestamp = None
-        self._last_stored_value = None
-        self._store_threshold = 0.5  # Minimum change to store new value
-        self._last_store_time = time.time() * 1000  # milliseconds
-        self._last_stored_frequency = None
 
     def start(self):
         """
         Starts all processes, based on configuration given in constructor.
-        :return:
         """
         self.reset_buffers(self._samples)
+        self.first_entry = None  # Reset the global first entry when acquisition starts
 
         if self._export:
             self._csv_process = CSVProcess(path=self._path)
@@ -75,7 +60,6 @@ class Worker:
             self._acquisition_process = SerialProcess(self._parser_process)
         elif self._source == SourceType.simulator:
             self._acquisition_process = SimulatorProcess(self._parser_process)
-
 
         if self._acquisition_process.open(port=self._port, speed=self._speed):
             if self._export:
@@ -112,7 +96,7 @@ class Worker:
         if not data or len(data) < 2:
             logging.warning(f"Invalid data format: {data}")
             return
-            
+
         timestamp, values = data
         # Store timestamp and values
         self._time_buffer.append(timestamp) 
@@ -208,23 +192,35 @@ class Worker:
             self._queue.get()
         logging.info("Buffers cleared")
 
-    def prepare_plot_data(self):
-        """Prepares data for plotting"""
+    def prepare_plot_data(self, calculate_thickness_fn=None, *args, **kwargs):
+        """
+        Prepares data for plotting with optional thickness calculation.
+        """
         time_data = np.array(self.get_time_buffer())
         if not time_data.size:
             return None, None, 0
-            
+
         plot_data = []
         for idx in range(self.get_lines()):
             signal_data = np.array(self.get_values_buffer(idx))
             if signal_data.size:
+                # Set the global first entry
+                if self.first_entry is None:
+                    self.first_entry = signal_data[0]
+                    logging.info(f"Global first entry set to {self.first_entry:.2f}")
+
+                frequency_change = signal_data - self.first_entry
+                thickness = None
+                if calculate_thickness_fn and callable(calculate_thickness_fn):
+                    thickness = calculate_thickness_fn(frequency_change, self.first_entry, idx)
+
                 plot_data.append({
                     'signal': signal_data,
-                    'frequency_change': signal_data - signal_data[0] if signal_data.size > 0 else None,
-                    'thickness': (signal_data - signal_data[0]) / self.material_density if signal_data.size > 0 else None
+                    'frequency_change': frequency_change,
+                    'thickness': thickness
                 })
                 logging.debug(f"Channel {idx} data: {signal_data[-1] if signal_data.size else 'No data'}")
-                
+
         return time_data, plot_data, len(plot_data)
 
     def set_material_density(self, density):
