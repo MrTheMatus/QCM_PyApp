@@ -12,11 +12,15 @@ import sqlite3
 import csv
 from time import time, sleep
 from utils.constants import Constants
+from app.setup_library import SetupLibrary
 from PyQt5 import QtCore, QtGui, QtWidgets
 import webbrowser
 from utils.architecture import Architecture
 from logging.handlers import TimedRotatingFileHandler
 import os
+from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from app.crystal_export import CrystalExport
+
 
 def log_calls(func):
     def wrapper(*args, **kwargs):
@@ -56,6 +60,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.y_data = []
 
         self.worker = Worker()
+        self.setup_library = SetupLibrary(db_path=self.db_path)
 
         self.ui.cBox_Source.addItems(Constants.app_sources)
         self.material_library = MaterialLibrary(db_path=self.db_path)
@@ -84,6 +89,14 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
         # Configure logging
         self._configure_logging()
+
+        self.edited_row_ids = set()  # Track edited rows by their IDs
+        self.load_setup_constants()
+
+        self.crystal_export = CrystalExport(db_path=self.db_path)  # Initialize CrystalExport
+        #self.ui.fetchButton_2.clicked.connect(self.fetch_plot_data)  # Fetch Plot button
+        self.ui.exportButton.clicked.connect(self.export_data)  # Export button
+
 
     def _configure_logging(self):
         """Configure logging settings and handlers."""
@@ -117,6 +130,8 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             self.ui.stackedWidget.setCurrentIndex(index)
             if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
                 self.load_materials()
+            if self.ui.stackedWidget.currentWidget().objectName() == "settingsPage":
+                self.load_setup_constants()
 
     def start(self, checked=False, *args, **kwargs):
         """
@@ -402,6 +417,17 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.infoButton.clicked.connect(lambda: self.switch_page(5))
         self.ui.helpButton.clicked.connect(self.open_help_documentation)
 
+        self.ui.settingsfetchButton.clicked.connect(self.load_setup_constants)
+        self.ui.setupComboBox.currentIndexChanged.connect(self.setup_selected)
+
+        self.ui.settingsaddButton.clicked.connect(self.add_setup_row)
+        self.ui.settingsdeleteButton.clicked.connect(self.delete_setup_row)
+        self.ui.settingsupdateButton.clicked.connect(self.update_setup_row)
+        self.ui.commitButton.clicked.connect(self.commit_changes)
+        self.ui.rollbackButton.clicked.connect(self.rollback_changes)
+
+
+
     def _update_sample_size(self, *args, **kwargs):
         if self.worker:
             self.worker.reset_buffers(self.ui.sBox_Samples.value())
@@ -581,3 +607,276 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             logging.error(f"Failed to open documentation: {e}")
             QMessageBox.warning(self, "Error", f"Cannot open documentation: {e}")
+
+    def load_setup_constants(self, *args, **kwargs):
+        """Load setup constants into the QTableView."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM SetupConstants")
+            rows = cursor.fetchall()
+            
+            # Create a model for QTableView
+            model = QStandardItemModel(len(rows), 7)  # Rows, columns
+            model.setHorizontalHeaderLabels([
+                "ID", "Quartz Density", "Shear Modulus", "Area", "Tooling Factor", "Description", "Created At"
+            ])
+            
+            # Populate the model
+            for row_idx, row in enumerate(rows):
+                for col_idx, value in enumerate(row):
+                    item = QStandardItem(str(value))
+                    item.setEditable(False)  # Make the item read-only
+                    model.setItem(row_idx, col_idx, item)
+
+            # Set the model to the QTableView
+            self.ui.settingsTableView.setModel(model)
+
+            # Populate the combo box with the setup descriptions
+            self.populate_setup_combobox(rows)
+
+            # Set column sizes for QTableView
+            header = self.ui.settingsTableView.horizontalHeader()
+            header.setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
+
+            header.resizeSection(0, 45)   # ID - narrow
+            header.resizeSection(1, 120)  # Quartz Density
+            header.resizeSection(2, 120)  # Shear Modulus
+            header.resizeSection(3, 65)   # Area
+            header.resizeSection(4, 120)  # Tooling Factor
+            header.resizeSection(5, 300)  # Description - wide
+            header.resizeSection(6, 200)  # Created At
+
+            logging.info("SetupConstants loaded into table view.")
+        except sqlite3.Error as e:
+            logging.error(f"Error loading setup constants: {e}")
+
+
+    def setup_selected(self, *args, **kwargs):
+        """Handle setup selection."""
+        setup_id = self.ui.setupComboBox.currentData()
+        if setup_id:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute("SELECT * FROM SetupConstants WHERE id = ?", (setup_id,))
+                setup = cursor.fetchone()
+                if setup:
+                    quartz_density, shear_modulus, area, tooling_factor = setup[1:5]
+                    logging.info(f"Setup selected: {setup}")
+                    # Use these values for thickness calculation
+            except sqlite3.Error as e:
+                logging.error(f"Error fetching selected setup: {e}")
+
+    def populate_setup_combobox(self, setups, *args, **kwargs):
+        """Populate the combo box with setup descriptions."""
+        self.ui.setupComboBox.clear()
+        for setup in setups:
+            self.ui.setupComboBox.addItem(setup[5], setup[0])  # Description, ID
+        logging.info("SetupComboBox populated.")
+
+    def add_setup_row(self, *args, **kwargs):
+        logging.info("Adding new setup row...")
+        model = self.ui.settingsTableView.model()
+        if not model:
+            logging.error("No model found for settingsTableView.")
+            return
+
+        # Add a blank row with a placeholder ID
+        new_row_index = model.rowCount()
+        model.insertRow(new_row_index)
+
+        placeholder_id = QStandardItem("NEW")
+        placeholder_id.setEditable(False)  # ID should not be editable
+        model.setItem(new_row_index, 0, placeholder_id)
+
+        # Add editable blank items for other columns
+        for col in range(1, model.columnCount()):
+            item = QStandardItem("")
+            item.setEditable(True)
+            model.setItem(new_row_index, col, item)
+
+        logging.info("New setup row added.")
+
+
+    def delete_setup_row(self, *args, **kwargs):
+        """Mark the selected row for deletion but defer database changes until commit."""
+        model = self.ui.settingsTableView.model()
+        if not model:
+            logging.error("No model found for settingsTableView.")
+            return
+
+        # Get the selected rows
+        selected_rows = self.ui.settingsTableView.selectionModel().selectedRows()
+        if not selected_rows:
+            logging.warning("No rows selected for deletion.")
+            return
+
+        for row in selected_rows:
+            row_id_item = model.item(row.row(), 0)  # ID column
+            if row_id_item:
+                row_id = row_id_item.text()
+                if row_id.isdigit():
+                    # Add ID to a deferred deletion list
+                    if not hasattr(self, "deferred_deletions"):
+                        self.deferred_deletions = []
+                    self.deferred_deletions.append(int(row_id))
+                    logging.info(f"Row with ID {row_id} marked for deletion.")
+
+            # Remove the row from the model
+            model.removeRow(row.row())
+
+        logging.info("Selected rows deleted from the view. Commit to apply changes.")
+
+
+    def commit_changes(self, *args, **kwargs):
+        """Commit changes from the table to the database."""
+        logging.info("Committing changes...")
+        model = self.ui.settingsTableView.model()
+        if not model:
+            logging.error("No model found for settingsTableView.")
+            return
+
+        # Handle deletions first
+        if hasattr(self, "deferred_deletions") and self.deferred_deletions:
+            for setup_id in self.deferred_deletions:
+                self.setup_library.delete_setup(setup_id)
+                logging.info(f"Deferred deletion committed for setup ID {setup_id}.")
+            self.deferred_deletions.clear()
+
+        # Process remaining rows for updates or inserts
+        for row in range(model.rowCount()):
+            id_item = model.item(row, 0)  # Column 0 is the ID
+            quartz_density = model.item(row, 1).text()
+            quartz_shear_modulus = model.item(row, 2).text()
+            quartz_area = model.item(row, 3).text()
+            tooling_factor = model.item(row, 4).text()
+            description = model.item(row, 5).text()
+
+            if id_item is None or id_item.text() == "NEW":
+                # Handle new row (INSERT)
+                new_id = self.setup_library.add_setup(
+                    quartz_density,
+                    quartz_shear_modulus,
+                    quartz_area,
+                    tooling_factor,
+                    description
+                )
+                logging.info(f"New setup added with ID {new_id}")
+
+                # Update the model with the new ID
+                id_item.setText(str(new_id))
+            elif int(id_item.text()) in self.edited_row_ids:
+                # Handle existing row (UPDATE) only if its ID is in the edited_row_ids set
+                self.setup_library.update_setup(
+                    id_item.text(),
+                    quartz_density,
+                    quartz_shear_modulus,
+                    quartz_area,
+                    tooling_factor,
+                    description
+                )
+                logging.info(f"Row with ID {id_item.text()} updated in database.")
+
+        # Clear the edited rows set
+        self.edited_row_ids.clear()
+
+        # Reload the table after commit
+        self.load_setup_constants()
+
+
+    def rollback_changes(self, *args, **kwargs):
+        """Reload setups from the database, discarding unsaved changes."""
+        self.load_setup_constants()
+
+        # Clear the deferred deletions list
+        if hasattr(self, "deferred_deletions"):
+            self.deferred_deletions.clear()
+
+        logging.info("Changes rolled back. All deletions and edits discarded.")
+
+    def update_setup_row(self, *args, **kwargs):
+        """Enable editing for the selected row."""
+        model = self.ui.settingsTableView.model()
+        if not model:
+            logging.error("No model found for settingsTableView.")
+            return
+
+        # Enable editing for the selected rows
+        selected_rows = self.ui.settingsTableView.selectionModel().selectedRows()
+
+        if not selected_rows:
+            logging.warning("No rows selected for editing.")
+            return
+
+        for row in selected_rows:
+            row_id_item = model.item(row.row(), 0)  # Column 0 is the ID
+            if row_id_item and row_id_item.text().isdigit():
+                row_id = int(row_id_item.text())
+                self.edited_row_ids.add(row_id)  # Track the row ID for updates
+                logging.info(f"Row with ID {row_id} enabled for editing.")
+
+            # Enable editing for all columns in the selected row
+            for col in range(model.columnCount()):
+                item = model.item(row.row(), col)
+                if item:
+                    item.setEditable(True)
+
+        logging.info("Selected rows are now editable.")
+
+
+    def get_setup_constants(self, row_id, *args, **kwargs):
+        """Get setup constants for the given row ID."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM SetupConstants WHERE id = ?", (row_id,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "quartz_density": row[1],
+                "quartz_shear_modulus": row[2],
+                "quartz_area": row[3],
+                "tooling_factor": row[4],
+                "description": row[5],
+                "created_at": row[6],
+            }
+        return None
+
+    def calculate_thickness(self, row_id, *args, **kwargs):
+        """Calculate thickness using the setup constants for the given row ID."""
+        setup_constants = self.get_setup_constants(row_id)
+        if setup_constants:
+            density = setup_constants["quartz_density"]
+            modulus = setup_constants["quartz_shear_modulus"]
+            area = setup_constants["quartz_area"]
+            tooling_factor = setup_constants["tooling_factor"]
+            return (density * modulus / area) * tooling_factor
+        return None
+    
+    def export_data(self, *args, **kwargs):
+        from_timestamp = self.ui.fromdateTimeEdit.dateTime().toPyDateTime()
+        to_timestamp = self.ui.todateTimeEdit.dateTime().toPyDateTime()
+        process_id = self.ui.processidLineEdit.text()
+        material = self.ui.materialComboBox.currentText() if self.ui.materialcheckBox.isChecked() else None
+
+        # Handle default null timestamps
+        from_timestamp = None if from_timestamp == datetime(2000, 1, 1) else from_timestamp
+        to_timestamp = None if to_timestamp == datetime(2000, 1, 1) else to_timestamp
+
+        # Fetch data based on filters
+        data = self.crystal_export.fetch_data(
+            process_id=process_id, 
+            material=material, 
+            from_timestamp=from_timestamp, 
+            to_timestamp=to_timestamp
+        )
+
+        # Map process IDs to names
+        process_names = {row["process_id"]: row["process_name"] for row in data}
+
+        # Export based on checkboxes
+        if self.ui.pngcheckBox.isChecked():
+            self.crystal_export.export_to_plot(data, process_names, "exports/plots")
+        if self.ui.csvcheckBox.isChecked():
+            self.crystal_export.export_to_csv(data, "exports/csv")
+        if self.ui.jsoncheckBox.isChecked():
+            self.crystal_export.export_to_json(data, "exports/json")
+
