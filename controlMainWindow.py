@@ -20,6 +20,8 @@ from logging.handlers import TimedRotatingFileHandler
 import os
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from app.crystal_export import CrystalExport
+import math
+import numpy as np
 
 
 def log_calls(func):
@@ -45,7 +47,7 @@ class LogHandler(logging.Handler):
 
 @log_all_methods
 class ControlMainWindow(QtWidgets.QMainWindow):
-    def __init__(self, parent=None, port=None, bd=115200, samples=500):
+    def __init__(self, parent=None, port=None, bd=115200, samples=10):
         super().__init__()
         self.ui = Ui_AffordableQCM()
         self.ui.setupUi(self)
@@ -76,31 +78,23 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         # Initialize recording state
         self.is_recording = False
         self.process_id = None
-
-        # Configure record button
-        self.ui.recordButton.clicked.connect(self.toggle_recording)
-
         # Initialize material handling
         self.current_density = None
         self.current_materialName = None
         self._populate_material_combobox()
-
-        self._last_db_insert = datetime.now()
-
         # Configure logging
         self._configure_logging()
-
         self.edited_row_ids = set()  # Track edited rows by their IDs
         self.load_setup_constants()
-
         self.crystal_export = CrystalExport(db_path=self.db_path)  # Initialize CrystalExport
-        #self.ui.fetchButton_2.clicked.connect(self.fetch_plot_data)  # Fetch Plot button
-        self.ui.exportButton.clicked.connect(self.export_data)  # Export button
-
+        # Configure record button
+        self.ui.recordButton.clicked.connect(self.toggle_recording)
+        self._last_db_insert = datetime.now()
 
     def _configure_logging(self):
         """Configure logging settings and handlers."""
         self.ui.logComboBox.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        self.ui.logComboBox.setCurrentIndex(3)
         self.ui.logComboBox.currentIndexChanged.connect(self._set_logging_level)
         self._set_logging_level()
 
@@ -117,6 +111,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         interval=1, 
         backupCount=7)
         log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        log_handler.stream.reconfigure(encoding='utf-8')
         logging.getLogger().addHandler(log_handler)
 
     def _set_logging_level(self, *args, **kwargs):
@@ -130,6 +125,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             self.ui.stackedWidget.setCurrentIndex(index)
             if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
                 self.load_materials()
+                self.load_process_table()
             if self.ui.stackedWidget.currentWidget().objectName() == "settingsPage":
                 self.load_setup_constants()
 
@@ -236,70 +232,83 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             )
             self.conn.commit()
             logging.info(f"Recording stopped for process ID: {self.process_id}")
+            self.load_process_table()
             
         except sqlite3.Error as e:
             logging.error(f"Failed to stop recording: {e}")
             raise
 
     def _update_plot(self, *args, **kwargs):
-        """Updates all plots with current data"""
-        self.worker.consume_queue()
-        time_data, plot_data, n_plots = self.worker.prepare_plot_data()
-        
-        if time_data is None or not time_data.size or n_plots == 0:
-            return
-            
-        # Clear all plots
-        self._plt.clear()
-        self._plt_4.clear() 
-        self._plt_2.clear()
-        self._plt_6.clear()
+            """Updates all plots with current data"""
+            self.worker.consume_queue()
+            time_data, plot_data, n_plots = self.worker.prepare_plot_data()
 
-        # Debug plot data before processing
-        logging.debug(f"Plot data: {plot_data}")
-        
-        # Get first channel data
-        channel_data = plot_data[0] if isinstance(plot_data, list) else plot_data
-        
-        if channel_data['signal'] is not None and channel_data['signal'].size > 0:
-            # Main plot 
-            self._plt.plot(x=time_data, y=channel_data['signal'], 
-                        pen=Constants.plot_colors[0])
-            
-            # Get latest values
-            current_frequency = float(channel_data['signal'][0])
-            current_thickness = float(channel_data['thickness'][0]) if channel_data['thickness'] is not None and channel_data['thickness'].size > 0 else 0.0
-            logging.info(f"cur freq data: {current_frequency:.2f}")
-            logging.info(f"cur th data: {current_thickness:.2f}")
-            #sleep(2)
-            # Update displays
-            self.ui.frequencyLineEdit.setText(f"{current_frequency:.2f}")
-            self.ui.thicknessLineEdit.setText(f"{current_thickness:.2f}")
-            self.ui.lcdNumberFreq.display(f"{current_frequency:.2f}")
-            self.ui.lcdNumberThickness.display(f"{current_thickness:.2f}")
-            
-            # Debug values
-            logging.debug(f"Updated displays - Frequency: {current_frequency:.2f}, Thickness: {current_thickness:.2f}")
-            
-            # Plot updates for first channel
-            self._plt_6.plot(x=time_data, y=channel_data['signal'],
-                         pen=Constants.plot_colors[0])
-            
-            if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0:
-                self._plt_2.plot(x=time_data, y=channel_data['frequency_change'],
-                             pen=Constants.plot_colors[0])
-            
-            if channel_data['thickness'] is not None and channel_data['thickness'].size > 0:
-                self._plt_4.plot(x=time_data, y=channel_data['thickness'],
-                             pen=Constants.plot_colors[0])
+            if time_data is None or not time_data.size or n_plots == 0:
+                return
 
-            # Save to database if recording
-            if self.is_recording:
-                self._save_to_database(
-                    current_frequency,
-                    channel_data['frequency_change'][-1] if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0 else 0,
-                    current_thickness
-                )
+            # Clear all plots
+            self._plt.clear()
+            self._plt_4.clear()
+            self._plt_2.clear()
+            self._plt_6.clear()
+
+            # Debug plot data before processing
+            logging.debug(f"Plot data: {plot_data}")
+
+            # Process each channel's data
+            for idx, channel_data in enumerate(plot_data):
+                if channel_data['signal'] is not None and channel_data['signal'].size > 0:
+                    # Plot signal data
+                    self._plt.plot(x=time_data, y=channel_data['signal'], 
+                                pen=Constants.plot_colors[idx])
+
+                    # Get latest values
+                    current_frequency = float(channel_data['signal'][0])
+                    delta_f = channel_data['signal'] - channel_data['signal'][0]
+                    f0 = channel_data['signal'][0]
+
+                    # Calculate thickness
+                    current_thickness = self.calculate_thickness(delta_f, f0, idx)
+                    if current_thickness is not None:
+                        channel_data['thickness'] = current_thickness
+
+                    logging.info(f"Channel {idx} - Frequency: {current_frequency:.2f}, Thickness: {current_thickness[0]:.2f} nm")
+
+                    # Update displays (for first channel only)
+                    if idx == 0:
+                        # Calculate the mean frequency and thickness
+                        mean_frequency = np.mean(current_frequency)
+                        mean_thickness = np.mean(current_thickness)
+
+                        # Update LineEdit and LCD with the same value
+                        self.ui.frequencyLineEdit.setText(f"{mean_frequency:.2f}")
+                        self.ui.thicknessLineEdit.setText(f"{mean_thickness:.2f}")
+
+                        # Ensure the LCDs receive the numerical value directly
+                        self.ui.lcdNumberFreq.display(mean_frequency)
+                        self.ui.lcdNumberThickness.display(mean_thickness)
+
+
+                    # Plot updates for thickness and frequency change
+                    if channel_data['thickness'] is not None and channel_data['thickness'].size > 0:
+                        self._plt_4.plot(x=time_data, y=channel_data['thickness'],
+                                        pen=Constants.plot_colors[idx])
+
+                    if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0:
+                        self._plt_2.plot(x=time_data, y=channel_data['frequency_change'],
+                                        pen=Constants.plot_colors[idx])
+
+                    # Plot updates for frequency
+                    self._plt_6.plot(x=time_data, y=channel_data['signal'],
+                                    pen=Constants.plot_colors[idx])
+
+                    # Save to database if recording
+                    if self.is_recording:
+                        self._save_to_database(
+                            current_frequency,
+                            channel_data['frequency_change'][-1] if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0 else 0,
+                            current_thickness[0]
+                        )
 
     def _should_insert_to_db(self, *args, **kwargs):
         time_diff = datetime.now() - self._last_db_insert
@@ -426,7 +435,10 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.commitButton.clicked.connect(self.commit_changes)
         self.ui.rollbackButton.clicked.connect(self.rollback_changes)
 
-
+        self.ui.settingsfetchButton.clicked.connect(self.load_setup_constants)  # Fetch Plot button
+        self.ui.exportButton.clicked.connect(self.export_data)  # Export button
+        self.ui.fetchButton_2.clicked.connect(self.load_process_table)
+        self.ui.processesTableView.setSortingEnabled(True)
 
     def _update_sample_size(self, *args, **kwargs):
         if self.worker:
@@ -660,7 +672,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                 cursor.execute("SELECT * FROM SetupConstants WHERE id = ?", (setup_id,))
                 setup = cursor.fetchone()
                 if setup:
-                    quartz_density, shear_modulus, area, tooling_factor = setup[1:5]
+                    quartz_densit, shear_modulus, area, tooling_factor = setup[1:5]
                     logging.info(f"Setup selected: {setup}")
                     # Use these values for thickness calculation
             except sqlite3.Error as e:
@@ -838,7 +850,15 @@ class ControlMainWindow(QtWidgets.QMainWindow):
                 "description": row[5],
                 "created_at": row[6],
             }
-        return None
+        return {
+            "id": 1,
+            "quartz_density": 2.65,  # Example value in g/cm^3
+            "quartz_shear_modulus": 2.95,  # Example value in GPa
+            "quartz_area": 10.0,  # Example value in mm^2
+            "tooling_factor": 1.0,  # Example tooling factor
+            "description": None,
+            "created_at": None,
+        }
 
     def calculate_thickness(self, row_id, *args, **kwargs):
         """Calculate thickness using the setup constants for the given row ID."""
@@ -880,3 +900,82 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         if self.ui.jsoncheckBox.isChecked():
             self.crystal_export.export_to_json(data, "exports/json")
 
+    def load_process_table(self, *args, **kwargs):
+        """
+        Load data from the Process table into the processesTableView.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT * FROM Process
+            """)
+            rows = cursor.fetchall()
+
+            # Create a model for processesTableView
+            model = QStandardItemModel(len(rows), 7)  # Rows, columns
+            model.setHorizontalHeaderLabels([
+                "Process ID", "Process Name", "Start Time", "End Time", "Material ID", "Setup ID", "User ID"
+            ])
+
+            # Populate the model
+            for row_idx, row in enumerate(rows):
+                for col_idx, value in enumerate(row):
+                    item = QStandardItem(str(value) if value is not None else "")
+                    item.setEditable(False)  # Make the items read-only
+                    model.setItem(row_idx, col_idx, item)
+
+            # Set the model to the processesTableView
+            self.ui.processesTableView.setModel(model)
+
+            # Adjust column widths
+            header = self.ui.processesTableView.horizontalHeader()
+            header.setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
+            header.resizeSection(0, 100)  # Process ID
+            header.resizeSection(1, 200)  # Process Name
+            header.resizeSection(2, 180)  # Start Time
+            header.resizeSection(3, 180)  # End Time
+            header.resizeSection(4, 100)  # Material ID
+            header.resizeSection(5, 100)  # Setup ID
+
+            logging.info("Process table loaded into processesTableView.")
+        except sqlite3.Error as e:
+            logging.error(f"Error loading process table: {e}")
+
+    def calculate_thickness(delta_f, f0, quartz_area_mm2, shear_modulus_gpa, quartz_density, material_density, tooling_factor):
+        # Convert units
+        quartz_area_cm2 = quartz_area_mm2 / 100  # mm^2 to cm^2
+        shear_modulus = shear_modulus_gpa * 1e10  # GPa to g/(cm·s^2)
+
+        # Sauerbrey equation for mass change
+        delta_mass = (-quartz_area_cm2 * math.sqrt(shear_modulus * quartz_density) * delta_f) / (2 * f0)
+
+        # Thickness calculation in nm
+        thickness_nm = (delta_mass / (quartz_area_cm2 * material_density)) * 1e7 * tooling_factor
+
+        return thickness_nm
+
+    def calculate_thickness(self, delta_f, f0, row_id, *args, **kwargs):
+            """Calculate thickness using the Sauerbrey equation."""
+            setup_constants = self.get_setup_constants(row_id)
+            if setup_constants:
+                quartz_area = setup_constants["quartz_area"]
+                shear_modulus = setup_constants["quartz_shear_modulus"]
+                quartz_density = setup_constants["quartz_density"]
+                material_density = self.current_density
+                tooling_factor = setup_constants["tooling_factor"]
+
+                quartz_area_cm2 = quartz_area / 100  # Convert mm^2 to cm^2
+                shear_modulus_g = shear_modulus * 1e10  # Convert GPa to g/(cm·s^2)
+
+                # Calculate thickness using the Sauerbrey equation
+                delta_mass = (
+                    -quartz_area_cm2
+                    * np.sqrt(shear_modulus_g * quartz_density)
+                    * delta_f
+                    / (2 * f0)
+                )
+                thickness_nm = (
+                    delta_mass / (quartz_area_cm2 * material_density) * tooling_factor * 1e7
+                )  # Convert to nm
+                return thickness_nm
+            return None

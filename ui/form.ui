@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1024</width>
-    <height>571</height>
+    <height>560</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -254,7 +254,7 @@
      </font>
     </property>
     <property name="currentIndex">
-     <number>3</number>
+     <number>0</number>
     </property>
     <widget class="QWidget" name="homePage">
      <widget class="QLabel" name="thicknessLabel">
@@ -452,7 +452,7 @@
        </font>
       </property>
       <property name="currentIndex">
-       <number>0</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="thicknessTab">
        <attribute name="title">
@@ -568,53 +568,13 @@
        <attribute name="title">
         <string>Processes</string>
        </attribute>
-       <widget class="QWidget" name="layoutWidget_3">
-        <property name="geometry">
-         <rect>
-          <x>20</x>
-          <y>280</y>
-          <width>961</width>
-          <height>32</height>
-         </rect>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayout_3">
-         <item>
-          <widget class="QPushButton" name="addButton_2">
-           <property name="text">
-            <string>Add</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="updateButton_2">
-           <property name="text">
-            <string>Update</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="deleteButton_2">
-           <property name="text">
-            <string>Delete</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="fetchButton_2">
-           <property name="text">
-            <string>Fetch</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
        <widget class="QTableView" name="processesTableView">
         <property name="geometry">
          <rect>
           <x>30</x>
           <y>30</y>
           <width>701</width>
-          <height>192</height>
+          <height>281</height>
          </rect>
         </property>
        </widget>
@@ -746,46 +706,6 @@
          <string>To</string>
         </property>
        </widget>
-       <widget class="QWidget" name="layoutWidget_4">
-        <property name="geometry">
-         <rect>
-          <x>20</x>
-          <y>240</y>
-          <width>961</width>
-          <height>32</height>
-         </rect>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayout_4">
-         <item>
-          <widget class="QCheckBox" name="jsoncheckBox">
-           <property name="text">
-            <string>json</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QCheckBox" name="csvcheckBox">
-           <property name="text">
-            <string>csv</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QCheckBox" name="pngcheckBox">
-           <property name="text">
-            <string>png</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="exportButton">
-           <property name="text">
-            <string>Export</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
        <widget class="QCheckBox" name="materialcheckBox">
         <property name="geometry">
          <rect>
@@ -798,6 +718,61 @@
         <property name="text">
          <string/>
         </property>
+       </widget>
+       <widget class="QWidget" name="layoutWidget">
+        <property name="geometry">
+         <rect>
+          <x>760</x>
+          <y>230</y>
+          <width>211</width>
+          <height>70</height>
+         </rect>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_3">
+           <item>
+            <widget class="QCheckBox" name="jsoncheckBox">
+             <property name="text">
+              <string>json</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="csvcheckBox">
+             <property name="text">
+              <string>csv</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="pngcheckBox">
+             <property name="text">
+              <string>png</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout">
+           <item>
+            <widget class="QPushButton" name="fetchButton_2">
+             <property name="text">
+              <string>Fetch</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="exportButton">
+             <property name="text">
+              <string>Export</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
        </widget>
       </widget>
       <widget class="QWidget" name="materialsTab">
@@ -1099,9 +1074,9 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLabel" name="processNameLabel">
     <property name="geometry">
      <rect>
-      <x>380</x>
+      <x>370</x>
       <y>450</y>
-      <width>121</width>
+      <width>131</width>
       <height>22</height>
      </rect>
     </property>
@@ -1133,9 +1108,9 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLabel" name="logLabel">
     <property name="geometry">
      <rect>
-      <x>380</x>
+      <x>370</x>
       <y>500</y>
-      <width>99</width>
+      <width>121</width>
       <height>22</height>
      </rect>
     </property>
@@ -1296,7 +1271,7 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLineEdit" name="frequencyROCLineEdit">
     <property name="geometry">
      <rect>
-      <x>21</x>
+      <x>160</x>
       <y>31</y>
       <width>125</width>
       <height>29</height>
@@ -1341,7 +1316,7 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLineEdit" name="thicknessLineEdit">
     <property name="geometry">
      <rect>
-      <x>160</x>
+      <x>750</x>
       <y>31</y>
       <width>125</width>
       <height>29</height>
@@ -1362,7 +1337,7 @@ hr { height: 1px; border-width: 0; }
    <widget class="QLineEdit" name="frequencyLineEdit">
     <property name="geometry">
      <rect>
-      <x>750</x>
+      <x>20</x>
       <y>31</y>
       <width>125</width>
       <height>29</height>
