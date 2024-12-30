@@ -602,10 +602,12 @@ class ControlMainWindow(QtWidgets.QMainWindow):
     def switch_record_button_icon(self, is_recording):
         """Switch the icon of the record button based on the recording state."""
         icon = QtGui.QIcon()
+        play_icon_path = os.path.join("ui", "..", "images", "play.png")
+        stop_icon_path = os.path.join("ui", "..", "images", "stop-button.png")
         if is_recording:
-            icon.addPixmap(QtGui.QPixmap(".\\ui\\../images/stop-button.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+            icon.addPixmap(QtGui.QPixmap(stop_icon_path), QtGui.QIcon.Normal, QtGui.QIcon.On)
         else:
-            icon.addPixmap(QtGui.QPixmap(".\\ui\\../images/play.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+            icon.addPixmap(QtGui.QPixmap(play_icon_path), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.ui.recordButton.setIcon(icon)
 
     def open_help_documentation(self, *args, **kwargs):
