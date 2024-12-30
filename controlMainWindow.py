@@ -76,31 +76,23 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         # Initialize recording state
         self.is_recording = False
         self.process_id = None
-
-        # Configure record button
-        self.ui.recordButton.clicked.connect(self.toggle_recording)
-
         # Initialize material handling
         self.current_density = None
         self.current_materialName = None
         self._populate_material_combobox()
-
-        self._last_db_insert = datetime.now()
-
         # Configure logging
         self._configure_logging()
-
         self.edited_row_ids = set()  # Track edited rows by their IDs
         self.load_setup_constants()
-
         self.crystal_export = CrystalExport(db_path=self.db_path)  # Initialize CrystalExport
-        #self.ui.fetchButton_2.clicked.connect(self.fetch_plot_data)  # Fetch Plot button
-        self.ui.exportButton.clicked.connect(self.export_data)  # Export button
-
+        # Configure record button
+        self.ui.recordButton.clicked.connect(self.toggle_recording)
+        self._last_db_insert = datetime.now()
 
     def _configure_logging(self):
         """Configure logging settings and handlers."""
         self.ui.logComboBox.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        self.ui.logComboBox.setCurrentIndex(3)
         self.ui.logComboBox.currentIndexChanged.connect(self._set_logging_level)
         self._set_logging_level()
 
@@ -130,6 +122,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             self.ui.stackedWidget.setCurrentIndex(index)
             if self.ui.stackedWidget.currentWidget().objectName() == "materialsPage":
                 self.load_materials()
+                self.load_process_table()
             if self.ui.stackedWidget.currentWidget().objectName() == "settingsPage":
                 self.load_setup_constants()
 
@@ -236,6 +229,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             )
             self.conn.commit()
             logging.info(f"Recording stopped for process ID: {self.process_id}")
+            self.load_process_table()
             
         except sqlite3.Error as e:
             logging.error(f"Failed to stop recording: {e}")
@@ -426,7 +420,10 @@ class ControlMainWindow(QtWidgets.QMainWindow):
         self.ui.commitButton.clicked.connect(self.commit_changes)
         self.ui.rollbackButton.clicked.connect(self.rollback_changes)
 
-
+        self.ui.settingsfetchButton.clicked.connect(self.load_setup_constants)  # Fetch Plot button
+        self.ui.exportButton.clicked.connect(self.export_data)  # Export button
+        self.ui.fetchButton_2.clicked.connect(self.load_process_table)
+        self.ui.processesTableView.setSortingEnabled(True)
 
     def _update_sample_size(self, *args, **kwargs):
         if self.worker:
@@ -879,4 +876,46 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             self.crystal_export.export_to_csv(data, "exports/csv")
         if self.ui.jsoncheckBox.isChecked():
             self.crystal_export.export_to_json(data, "exports/json")
+
+    def load_process_table(self, *args, **kwargs):
+        """
+        Load data from the Process table into the processesTableView.
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT * FROM Process
+            """)
+            rows = cursor.fetchall()
+
+            # Create a model for processesTableView
+            model = QStandardItemModel(len(rows), 7)  # Rows, columns
+            model.setHorizontalHeaderLabels([
+                "Process ID", "Process Name", "Start Time", "End Time", "Material ID", "Setup ID", "User ID"
+            ])
+
+            # Populate the model
+            for row_idx, row in enumerate(rows):
+                for col_idx, value in enumerate(row):
+                    item = QStandardItem(str(value) if value is not None else "")
+                    item.setEditable(False)  # Make the items read-only
+                    model.setItem(row_idx, col_idx, item)
+
+            # Set the model to the processesTableView
+            self.ui.processesTableView.setModel(model)
+
+            # Adjust column widths
+            header = self.ui.processesTableView.horizontalHeader()
+            header.setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
+            header.resizeSection(0, 100)  # Process ID
+            header.resizeSection(1, 200)  # Process Name
+            header.resizeSection(2, 180)  # Start Time
+            header.resizeSection(3, 180)  # End Time
+            header.resizeSection(4, 100)  # Material ID
+            header.resizeSection(5, 100)  # Setup ID
+
+            logging.info("Process table loaded into processesTableView.")
+        except sqlite3.Error as e:
+            logging.error(f"Error loading process table: {e}")
+
 
