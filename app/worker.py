@@ -17,10 +17,6 @@ class Worker:
     """
     Concentrates all workers (processes) to run the application.
     """
-class Worker:
-    """
-    Concentrates all workers (processes) to run the application.
-    """
     def __init__(self, port=None, speed=Constants.serial_default_speed, samples=Constants.argument_default_samples,
                  source=SourceType.serial, export_enabled=False, export_path=Constants.app_export_path, db_path="deploy/db/database.db", material_density=None):
         self._queue = Queue()
@@ -108,7 +104,7 @@ class Worker:
             self._lines = min(len(values), Constants.plot_max_lines)
             for idx in range(self._lines):
                 self._data_buffers[idx].append(float(values[idx]))
-            logging.debug(f"Stored values: {values[:self._lines]}")
+            logging.info(f"Stored values: {values[:self._lines]}")
         except (ValueError, IndexError) as e:
             logging.error(f"Error storing values: {e}")
 
@@ -135,6 +131,7 @@ class Worker:
         :return: Current number of lines.
         :rtype: int.
         """
+        logging.info(f"Number of channels (lines): {self._lines}")
         return self._lines
 
     def is_running(self):
@@ -219,7 +216,9 @@ class Worker:
                     'frequency_change': frequency_change,
                     'thickness': thickness
                 })
-                logging.debug(f"Channel {idx} data: {signal_data[-1] if signal_data.size else 'No data'}")
+                logging.info(f"Channel {idx} data: {signal_data[-1] if signal_data.size else 'No data'}")
+                logging.info(f"Channel {idx} frequency change: {frequency_change}")
+                logging.info(f"Channel {idx} thickness: {thickness}")
 
         return time_data, plot_data, len(plot_data)
 

@@ -239,66 +239,64 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             raise
 
     def _update_plot(self, *args, **kwargs):
-            """Updates all plots with current data"""
-            self.worker.consume_queue()
-            time_data, plot_data, n_plots = self.worker.prepare_plot_data()
+        """Updates all plots with current data"""
+        self.worker.consume_queue()
+        time_data, plot_data, n_plots = self.worker.prepare_plot_data()
+        
+        if time_data is None or not time_data.size or n_plots == 0:
+            return
+            
+        # Clear all plots
+        self._plt.clear()
+        self._plt_4.clear() 
+        self._plt_2.clear()
+        self._plt_6.clear()
 
-            if time_data is None or not time_data.size or n_plots == 0:
-                return
+        # Debug plot data before processing
+        logging.info(f"Plot data: {plot_data}")
+        logging.info(f"Number of channels being processed: {n_plots}")
+        
+        # Process each channel's data
+        for idx, channel_data in enumerate(plot_data):
+            if channel_data['signal'] is not None and channel_data['signal'].size > 0:
+                # Plot signal data
+                self._plt.plot(x=time_data, y=channel_data['signal'], 
+                            pen=Constants.plot_colors[idx])
 
-            # Clear all plots
-            self._plt.clear()
-            self._plt_4.clear()
-            self._plt_2.clear()
-            self._plt_6.clear()
-
-            # Debug plot data before processing
-            logging.debug(f"Plot data: {plot_data}")
-
-            # Process each channel's data
-            for idx, channel_data in enumerate(plot_data):
-                if channel_data['signal'] is not None and channel_data['signal'].size > 0:
-                    # Plot signal data
-                    self._plt.plot(x=time_data, y=channel_data['signal'], 
-                                pen=Constants.plot_colors[idx])
-
-                    # Get latest values
-                    current_frequency = float(channel_data['signal'][0])
-                    delta_f = channel_data['signal'] - channel_data['signal'][0]
-                    f0 = channel_data['signal'][0]
-
-                    # Calculate thickness
-                    current_thickness = self.calculate_thickness(delta_f, f0, idx)
-                    if current_thickness is not None:
-                        channel_data['thickness'] = current_thickness
-
-                    logging.info(f"Channel {idx} - Frequency: {current_frequency:.2f}, Thickness: {current_thickness[0]:.2f} nm")
-
-                    current_frequency = np.array(channel_data['signal'])
-                    current_thickness = np.array(channel_data['thickness']) if channel_data['thickness'] is not None else np.array([])
+                # Get latest values
+                current_frequency = np.array(channel_data['signal'])
+                current_thickness = np.array(channel_data['thickness']) if channel_data['thickness'] is not None else np.array([])
+                
+                # Update displays (for first channel only)
+                if idx == 0:
+                    # Calculate the mean frequency and thickness
                     mean_frequency = np.mean(current_frequency)
                     mean_thickness = np.mean(current_thickness)
 
-                    # Plot updates for thickness and frequency change
-                    if channel_data['thickness'] is not None and channel_data['thickness'].size > 0:
-                        self._plt_4.plot(x=time_data, y=channel_data['thickness'],
-                                        pen=Constants.plot_colors[idx])
+                    # Update LineEdit and LCD with the same value
+                    self.ui.frequencyLineEdit.setText(f"{mean_frequency:.2f}")
+                    self.ui.thicknessLineEdit.setText(f"{mean_thickness:.2f}")
 
-                    if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0:
-                        self._plt_2.plot(x=time_data, y=channel_data['frequency_change'],
-                                        pen=Constants.plot_colors[idx])
+                    # Ensure the LCDs receive the numerical value directly
+                    self.ui.lcdNumberFreq.display(mean_frequency)
+                    self.ui.lcdNumberThickness.display(mean_thickness)
 
-                    # Plot updates for frequency
-                    self._plt_6.plot(x=time_data, y=channel_data['signal'],
+                    # Log buffers
+                    logging.info(f"Frequency buffer: {current_frequency}")
+                    logging.info(f"Thickness buffer: {current_thickness}")
+
+                # Plot updates for thickness and frequency change
+                if channel_data['thickness'] is not None and channel_data['thickness'].size > 0:
+                    self._plt_4.plot(x=time_data, y=channel_data['thickness'],
                                     pen=Constants.plot_colors[idx])
 
-                    # Save to database if recording
-                    if self.is_recording:
-                        self._save_to_database(
-                            current_frequency,
-                            channel_data['frequency_change'][-1] if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0 else 0,
-                            current_thickness[0]
-                        )
+                if channel_data['frequency_change'] is not None and channel_data['frequency_change'].size > 0:
+                    self._plt_2.plot(x=time_data, y=channel_data['frequency_change'],
+                                    pen=Constants.plot_colors[idx])
+
+                # Plot updates for frequency
+                self._plt_6.plot(x=time_data, y=channel_data['signal'],
+                                pen=Constants.plot_colors[idx])
 
     def _should_insert_to_db(self, *args, **kwargs):
         time_diff = datetime.now() - self._last_db_insert
@@ -573,7 +571,7 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             if self.ui.materialComboBox.count() > 0:
                 self.current_density = self.ui.materialComboBox.currentData()
                 self.current_materialName = self.ui.materialComboBox.currentText()
-            logging.debug("Material combo box populated")
+            logging.info("Material combo box populated")
         except Exception as e:
             logging.error(f"Error populating material combo box: {e}")
 
@@ -852,16 +850,31 @@ class ControlMainWindow(QtWidgets.QMainWindow):
             "created_at": None,
         }
 
-    def calculate_thickness(self, row_id, *args, **kwargs):
-        """Calculate thickness using the setup constants for the given row ID."""
+    def calculate_thickness(self, f0, delta_f, row_id, *args, **kwargs):
         setup_constants = self.get_setup_constants(row_id)
         if setup_constants:
-            density = setup_constants["quartz_density"]
-            modulus = setup_constants["quartz_shear_modulus"]
-            area = setup_constants["quartz_area"]
-            tooling_factor = setup_constants["tooling_factor"]
-            return (density * modulus / area) * tooling_factor
-        return None
+            quartz_area = setup_constants["quartz_area"]  # Quartz crystal area (cm²)
+            shear_modulus = setup_constants["quartz_shear_modulus"]  # Shear modulus (N/m²)
+            quartz_density = setup_constants["quartz_density"]  # Quartz density (g/cm³)
+            material_density = self.current_density  # Material density (g/cm³)
+            tooling_factor = setup_constants["tooling_factor"]  # Tooling factor (dimensionless)
+
+            # Sauerbrey mass change per unit area
+            delta_mass_per_area = (-delta_f) / (
+                2 * f0**2 / (shear_modulus * quartz_density) ** 0.5
+            )
+
+            # Adjust for tooling factor
+            delta_mass_per_area *= tooling_factor
+            logging.info(f"Frequency: {f0}, Delta Frequency: {delta_f}, Delta Mass/Area: {delta_mass_per_area}, tooling factor: {tooling_factor}")
+            # Calculate thickness
+            thickness = delta_mass_per_area / material_density
+            logging.info(f"Calculated thickness: {thickness} cm")
+            return thickness
+        else:
+            logging.error("Setup constants not found")
+            return None
+
     
     def export_data(self, *args, **kwargs):
         from_timestamp = self.ui.fromdateTimeEdit.dateTime().toPyDateTime()

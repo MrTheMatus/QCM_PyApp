@@ -6,3 +6,5 @@ log.txt
 diff.txt
 *.db
 logs/
+exports/
+ERRORS/
