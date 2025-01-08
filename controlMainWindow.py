@@ -274,20 +274,10 @@ class ControlMainWindow(QtWidgets.QMainWindow):
 
                     logging.info(f"Channel {idx} - Frequency: {current_frequency:.2f}, Thickness: {current_thickness[0]:.2f} nm")
 
-                    # Update displays (for first channel only)
-                    if idx == 0:
-                        # Calculate the mean frequency and thickness
-                        mean_frequency = np.mean(current_frequency)
-                        mean_thickness = np.mean(current_thickness)
-
-                        # Update LineEdit and LCD with the same value
-                        self.ui.frequencyLineEdit.setText(f"{mean_frequency:.2f}")
-                        self.ui.thicknessLineEdit.setText(f"{mean_thickness:.2f}")
-
-                        # Ensure the LCDs receive the numerical value directly
-                        self.ui.lcdNumberFreq.display(mean_frequency)
-                        self.ui.lcdNumberThickness.display(mean_thickness)
-
+                    current_frequency = np.array(channel_data['signal'])
+                    current_thickness = np.array(channel_data['thickness']) if channel_data['thickness'] is not None else np.array([])
+                    mean_frequency = np.mean(current_frequency)
+                    mean_thickness = np.mean(current_thickness)
 
                     # Plot updates for thickness and frequency change
                     if channel_data['thickness'] is not None and channel_data['thickness'].size > 0:
